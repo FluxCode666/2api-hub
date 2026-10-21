@@ -132,7 +132,8 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod --p
 
 - **可用性探测**：每 10 分钟一次（可配），记录 TTFT / 延迟 / 成功率。
 - **真伪检测**：8 项检查（连通性、模型名回显、协议特征、Token 计数、知识与身份、推理能力、能力特征、输出速度），加权得分 → genuine / suspect / fake / unknown。
-- **推荐分**：可用率 45% + 延迟 20% + 可信 25% + 稳定性 10%。
+- **推荐分**：可用率 45% + 延迟 20% + 可信 25% + 稳定性 10%（权重可在管理后台调整）。可用率非线性计分 `uptime^8`（99%→92、95%→66、90%→43），判为假模型（可信分 < 50）的渠道推荐分封顶 40。价格不计入推荐分，单独排序。
+- **真伪分与稳定性解耦**：检测时遇到 429 / 5xx / 超时会退避重试，仍失败的检查项不计分，避免被限流的正规渠道被误判。
 
 详见 [docs/SPEC.md](docs/SPEC.md) §5。
 
@@ -141,6 +142,18 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod --p
 - **`/verify` 公开鉴定**：单 IP 每小时额度（默认 10 次，管理后台可调）+ 单 IP 并发上限 1 + 进程级全局并发上限 4。全局上限是**进程级**内存计数，多实例部署时按实例数叠加（如需严格全局上限，需共享令牌存储）。
 - **站长手动真伪检测**：每渠道每日额度（默认 3 次），原子入队（渠道行锁 + 复用活动任务 + 唯一索引兜底）。超额度时 PATCH 配置照常保存但不入队，响应头 `X-Hub-Notice` 提示。
 - **注册**：管理后台 `site.allowRegistration=false` 时关闭。
+
+## 上线前须知
+
+1. **校准 token 计数检测**：除 OpenAI 系使用精确分词器外，其余厂商的期望区间是经验值，并与 mock 对齐。上线前需要用各厂商官方 Key 运行 `pnpm --filter @hub/probe calibrate -- --base-url ... --key ... --protocol ... --model ...`，把输出写回 `packages/probe/src/calibration.ts`。详见 `docs/handoff/probe.md`「真实环境校准指南」。
+2. 生产环境必须 `ALLOW_PRIVATE_PROBE=false`（SSRF 防护），`TRUST_PROXY` 只填写可信的反向代理地址，并启用 HTTPS（生产环境的 Cookie 带 Secure）。
+3. 演示种子数据中的站点均指向 mock-upstream，正式运营前请清空业务数据（不要执行 `db:seed`），通过管理后台创建管理员与模型目录。
+
+## 质量保障
+
+- 测试：`@hub/probe` 154、`@hub/api` 23、`@hub/worker` 26。api 与 worker 的测试使用独立库 `hub_test`，不影响开发数据。
+- 两轮独立代码审查（安全、并发、正确性）及修复记录：`docs/review/api-review.md`、`docs/review/engine-review.md`。
+- 各模块交接文档：`docs/handoff/`（web / api / probe / worker）。
 
 ## 团队协作
 

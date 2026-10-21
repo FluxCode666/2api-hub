@@ -44,8 +44,7 @@ function randId(n = 12): string {
 /** 按 3-4 字符切 chunk（模拟 token 级流式输出） */
 function chunkify(text: string): string[] {
   const chunks: string[] = [];
-  let i = 0;
-  while (i < text.length) {
+  for (let i = 0; i < text.length; ) {
     const size = Math.random() < 0.5 ? 3 : 4;
     chunks.push(text.slice(i, i + size));
     i += size;
@@ -399,6 +398,10 @@ export function buildNonStream(ctx: ReplyContext): string {
       return anthropicNonStream(ctx);
     case 'gemini':
       return geminiNonStream(ctx);
+    default: {
+      const never: never = ctx.protocol;
+      throw new Error(`未知协议: ${String(never)}`);
+    }
   }
 }
 
@@ -413,6 +416,10 @@ export async function writeStream(ctx: ReplyContext, write: StreamWriter): Promi
       return anthropicStream(ctx, write);
     case 'gemini':
       return geminiStream(ctx, write);
+    default: {
+      const never: never = ctx.protocol;
+      throw new Error(`未知协议: ${String(never)}`);
+    }
   }
 }
 

@@ -78,7 +78,7 @@ assertSafeUrl(url, allowPrivate?): Promise<void>               // 唯一会抛�
 ## 三、运行与验证
 
 ```bash
-# 1. 单元测试（139 个：SSE 解析、协议解析、评分、SSRF、模型匹配、题库、TLS 回归、Key 脱敏、临时错误判定）
+# 1. 单元测试（154 个：SSE、协议解析、评分、SSRF、模型匹配、题库、TLS 回归（fixture 化+具体错误码断言）、Key 脱敏（先脱敏再截断）、临时错误判定、总预算、流健壮性）
 pnpm --filter @hub/probe test
 # 2. typecheck
 pnpm --filter @hub/probe typecheck && pnpm --filter @hub/mock-upstream typecheck
@@ -88,33 +88,33 @@ pnpm --filter @hub/mock-upstream dev
 cd packages/probe && npx tsx scripts/verify-scenarios.ts
 ```
 
-### 集成验证结果表（2026-10-22 最终轮，含临时错误重试修订，mock-upstream @ 127.0.0.1:8712）
+### 集成验证结果表（2026-10-22 第三轮：二轮审查修复后，mock-upstream @ 127.0.0.1:8712）
 
-**probeAvailability**（flaky/ratelimited 各 10 次统计；可用性探测**不重试**——可用率本身衡量失败率）：
+**probeAvailability**（flaky/ratelimited 各 10 次统计；可用性探测不重试——可用率衡量稳定性）：
 
 | scenario | ok | latency | ttft | error |
 | --- | --- | --- | --- | --- |
-| genuine | 1/1 | 65ms | 42ms | — |
-| fast | 1/1 | 9ms | 6ms | — |
-| slow | 1/1 | 8716ms | 8710ms | — |
-| flaky | 7/10 | 67ms | 57ms | http_5xx(502)×3 |
-| ratelimited | 7/10 | 86ms | 61ms | http_429×3 |
-| downgraded | 1/1 | 76ms | 54ms | — |
-| fake | 1/1 | 64ms | 52ms | — |
+| genuine | 1/1 | 61ms | 49ms | — |
+| fast | 1/1 | 10ms | 7ms | — |
+| slow | 1/1 | 9161ms | 9154ms | — |
+| flaky | 6/10 | 65ms | 44ms | http_5xx(502)×4 |
+| ratelimited | 4/10 | 57ms | 45ms | http_429×6 |
+| downgraded | 1/1 | 77ms | 53ms | — |
+| fake | 1/1 | 70ms | 58ms | — |
 | dead | 0/1 | 2ms | — | http_5xx(503) |
 
-**probeAuthenticity**（子请求临时错误按退避重试最多 2 次，仍失败记 passed=null 不计分）：
+**probeAuthenticity**（子请求临时错误退避重试最多 2 次仍失败记 null；总预算 quick 60s / 非 quick 180s）：
 
 | scenario | score | verdict | 失败项 |
 | --- | --- | --- | --- |
-| genuine | 100 | **genuine** ✓ | 无 |
-| fast | 95 | **genuine** ✓ | speed（1047 tps 超宽松上限，属 mock 特性） |
-| slow | 95 | **genuine** ✓ | speed（3.9 tps，TTFT 8.7s 属设计） |
-| flaky | 100 | **genuine** ✓ | 无（502 被重试化解，不再扣分） |
-| ratelimited | 100 | **genuine** ✓ | 无（429 被重试化解，不再扣分） |
-| downgraded (anthropic) | 63 | **suspect** ✓ | token_count 差分法（纯文本 142 ∉ [156,184] 换皮信号命中）+ reasoning 2/3 + capability（无 signature） |
+| genuine | 100 | **genuine** ✓ | 无（capability 修复后恢复 ✓） |
+| fast | 95 | **genuine** ✓ | speed（1100 tps 超宽松上限，属 mock 特性） |
+| slow | 95 | **genuine** ✓ | speed（3.0 tps，TTFT 9.2s 属设计） |
+| flaky | 100 | **genuine** ✓ | 无（502 被重试化解） |
+| ratelimited | 100 | **genuine** ✓ | 无（429 被重试化解） |
+| downgraded (anthropic) | 57 | **suspect** ✓ | token_count 差分法（142 ∉ [156,184]）+ reasoning 1/3 + capability（无 signature） |
 | fake | 25 | **fake** ✓ | model_echo（回显 gpt-4o-mini）+ response_shape（x123 无前缀、无 usage）+ reasoning 0/3 |
-| dead | null | **unknown** ✓ | 全部检查因临时错误未计分，权重 <30 → unknown（实测 connectivity=null：「上游临时错误（http_5xx），重试 2 次后仍失败，本项未计分」） |
+| dead | null | **unknown** ✓ | 单独实测：全部检查因临时错误未计分，权重 <30 → unknown |
 
 判定校验全部符合预期：genuine/fast/slow/flaky/ratelimited → genuine；downgraded → suspect；fake → fake；dead → unknown（权重不足）。
 
@@ -163,6 +163,15 @@ google/zhipu（×1.05）两簇内部 30 个组合**不可区分**——这是分
 几乎相同的客观事实。token_count 对这些组合不给出错误的 fake 信号（不误报），
 真伪判断由 reasoning（20 分）+ knowledge + capability 等检查承担。
 完整矩阵运行 `npx tsx scripts/distinct-analysis.ts` 查看。
+
+### 二轮审查修复（2026-10-22，docs/review/engine-review.md）
+
+**P1 #1 脱敏**：新增 `redactThenTruncate`（统一出口：**先脱敏再截断**，修复 `x.repeat(290)+KEY` 截断边界前缀泄露）；Key 精确替换门槛从 ≥8 降到 **≥4**；sample/detail/evidence/listUpstreamModels 错误全部走同一出口。测试含审查复现用例（5 项新增）。
+**P1 #6 总预算**：`probeAuthenticity` 入口创建总 deadline + 组合 AbortSignal（`AbortSignal.any`），DNS（signal 前移）、所有子请求、读取流、重试退避（可中断等待）共享剩余预算；**quick 强制 60s**、非 quick 默认 180s（`totalBudgetMs` 可配）；预算耗尽 → 剩余检查 `passed:null`「检测时间预算耗尽，本项未执行」。实现 SPEC 独立 **TTFT 20s** 超时（仅对预期文本的请求；纯工具调用探测 `expectText:false` 豁免——合法响应可能无文本 delta）。测试：审查「每请求 13s」用例实测 60.0s 截止（旧实现 65.0s）。
+**P2 #11 能力检查合法性**：anthropic `thinking.budget_tokens=1024 < max_tokens=2048`；openai_responses tools 改顶层 `{type:'function',name,parameters}` 结构。mock-upstream **严格校验**两类请求（非法 → 400 `invalid_request_error`），已验证四种组合（非法 400 ×2 / 合法 200 ×2）。
+**P2 #12 流解析健壮性**：四协议识别流内失败终态（OpenAI `error` 事件 / `response.failed` / Anthropic `error` / Gemini `error`）→ `invalid_response`（旧实现 `success:true`，审查复现四例全改判失败）；`asString`/`asTokenCount` 运行时类型校验（非字符串按缺失、token 必须有限非负）；**空 tool_calls 不算成功**；异常路径 `reader.cancel()` 释放流；`probeAvailability`/`probeAuthenticity`/`listUpstreamModels` 外层兜底 try/catch **绝不抛异常**（审查的 `model=42 → TypeError` 已由类型校验+`modelEchoMatches` 字符串防御双重覆盖）。8 项复现测试全过。
+**TLS fixture**：测试证书移入 `packages/probe/test/fixtures/`（含重建说明 README），不依赖 /tmp；自签证书用例改用 127.0.0.1 直连（localhost→::1 会造成 ECONNREFUSED 假阳性，审查点名）并**断言具体错误码 `DEPTH_ZERO_SELF_SIGNED_CERT`**。
+**mock-upstream**：`MOCK_HOST` 环境变量（默认 127.0.0.1）。
 
 ## 六、对其他角色的依赖 / 请求
 

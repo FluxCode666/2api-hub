@@ -113,11 +113,13 @@ function budgetSignalAborted(opts: ProbeOptions | undefined): boolean {
   return opts?.signal?.aborted === true;
 }
 
-/** 发起流式请求并完整消费为 capture；错误归类到 ProbeResult（不抛异常） */
+/** 发起流式请求并完整消费为 capture；错误归类到 ProbeResult（不抛异常）。
+ * payload.expectText=false 的请求（如纯工具调用探测）不做 TTFT 超时——
+ * 合法响应可能没有任何文本 delta（只有 tool_use/thinking）。 */
 async function doStreamCapture(
   target: ProbeTarget,
   opts: ProbeOptions | undefined,
-  payload: StreamRequestPayload,
+  payload: StreamRequestPayload & { expectText?: boolean },
 ): Promise<{
   capture: ProtocolCapture;
   result: ProbeResult;
@@ -156,18 +158,22 @@ async function doStreamCapture(
         truncated: false,
       };
     }
-    // TTFT 独立计时（P1#6）：首个内容 token 20s 未到 → 中止流，判 timeout
-    const ttftTimer = setTimeout(() => {
-      if (firstTokenAt.atMs === null) {
-        void res.body?.cancel().catch(() => {});
-      }
-    }, Math.min(TTFT_TIMEOUT_MS, p.timeoutMs));
+    // TTFT 独立计时（P1#6）：首个内容 token 20s 未到 → 中止流，判 timeout。
+    // 仅对预期有文本的请求启用（expectText 默认 true；capability 纯工具调用探测为 false）
+    const expectText = payload.expectText !== false;
+    const ttftTimer = expectText
+      ? setTimeout(() => {
+          if (firstTokenAt.atMs === null) {
+            void res.body?.cancel().catch(() => {});
+          }
+        }, Math.min(TTFT_TIMEOUT_MS, p.timeoutMs))
+      : null;
     let sseOk = false;
     let truncated = false;
     try {
       ({ sseOk, truncated } = await consumeStream(res, adapter, capture, firstTokenAt, 2 * 1024 * 1024));
     } finally {
-      clearTimeout(ttftTimer);
+      if (ttftTimer !== null) clearTimeout(ttftTimer);
     }
     // P2#12：流内错误终态（OpenAI error 事件 / response.failed / Anthropic error / Gemini error）→ 失败
     if (capture.streamError !== null) {
@@ -180,7 +186,7 @@ async function doStreamCapture(
         truncated: false,
       };
     }
-    if (firstTokenAt.atMs === null && p.timeoutMs > TTFT_TIMEOUT_MS && !budgetSignalAborted(opts)) {
+    if (expectText && firstTokenAt.atMs === null && p.timeoutMs > TTFT_TIMEOUT_MS && !budgetSignalAborted(opts)) {
       // 首内容 token 20s 内未到达且总超时未到——SPEC：TTFT 超时
       return {
         capture,
@@ -637,6 +643,8 @@ function capabilityPayload(target: ProbeTarget, protocol: ChannelProtocol): Stre
   if (protocol === 'anthropic') {
     return {
       ...base,
+      // 纯工具调用探测：可能无文本 delta（thinking + tool_use），不做 TTFT 超时
+      expectText: false,
       extra: {
         thinking: { type: 'enabled', budget_tokens: 1024 }, // 1024 < max_tokens 2048 ✓
         tools: [{ name: 'get_weather', description: 'Get current weather of a city', input_schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] } }],
@@ -647,6 +655,7 @@ function capabilityPayload(target: ProbeTarget, protocol: ChannelProtocol): Stre
   if (protocol === 'gemini') {
     return {
       ...base,
+      expectText: false,
       extra: {
         tools: [{ functionDeclarations: [{ name: 'get_weather', description: 'Get current weather of a city', parameters: { type: 'OBJECT', properties: { city: { type: 'STRING' } }, required: ['city'] } }] }],
       },
@@ -655,6 +664,7 @@ function capabilityPayload(target: ProbeTarget, protocol: ChannelProtocol): Stre
   if (protocol === 'openai_responses') {
     return {
       ...base,
+      expectText: false,
       extra: {
         // Responses API：顶层 {type:'function', name, parameters}（无 function 嵌套）
         tools: [{ type: 'function', name: 'get_weather', description: 'Get current weather of a city', parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] } }],
@@ -664,6 +674,7 @@ function capabilityPayload(target: ProbeTarget, protocol: ChannelProtocol): Stre
   // openai_chat：嵌套结构
   return {
     ...base,
+    expectText: false,
     extra: {
       tools: [{
         type: 'function',

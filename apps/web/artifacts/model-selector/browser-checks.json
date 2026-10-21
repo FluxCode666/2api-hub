@@ -1,0 +1,71 @@
+[
+  {
+    "name": "vendor-direct",
+    "url": "http://127.0.0.1:3210/vendors/anthropic?model=claude-opus-5-5",
+    "value": "Opus 5.5",
+    "readOnly": false,
+    "vendor": "厂商：Anthropic",
+    "width": 1440,
+    "height": 900,
+    "scrollWidth": 1440
+  },
+  {
+    "name": "vendor-name-choice",
+    "url": "http://127.0.0.1:3210/vendors/anthropic?model=claude-sonnet-5-5&vendor=anthropic",
+    "value": "Sonnet 5.5",
+    "readOnly": false,
+    "vendor": "厂商：Anthropic",
+    "width": 1440,
+    "height": 900,
+    "scrollWidth": 1440
+  },
+  {
+    "name": "vendor-back",
+    "url": "http://127.0.0.1:3210/vendors/anthropic?model=claude-opus-5-5",
+    "value": "Opus 5.5",
+    "readOnly": false,
+    "vendor": "厂商：Anthropic",
+    "width": 1440,
+    "height": 900,
+    "scrollWidth": 1440
+  },
+  {
+    "name": "vendor-clear",
+    "url": "http://127.0.0.1:3210/vendors/anthropic?vendor=anthropic",
+    "value": "",
+    "readOnly": false,
+    "width": 1440,
+    "height": 900,
+    "scrollWidth": 1440
+  },
+  {
+    "name": "vendor-slug-input",
+    "url": "http://127.0.0.1:3210/vendors/anthropic?vendor=anthropic&model=claude-opus-5-5",
+    "value": "Opus 5.5",
+    "readOnly": false,
+    "vendor": "厂商：Anthropic",
+    "width": 1440,
+    "height": 900,
+    "scrollWidth": 1440
+  },
+  {
+    "name": "unresolved-draft-restored",
+    "url": "http://127.0.0.1:3210/vendors/anthropic?vendor=anthropic&model=claude-opus-5-5",
+    "value": "Opus 5.5",
+    "readOnly": false,
+    "vendor": "厂商：Anthropic",
+    "width": 1440,
+    "height": 900,
+    "scrollWidth": 1440
+  },
+  {
+    "name": "rankings-mobile",
+    "url": "http://127.0.0.1:3210/rankings?model=claude-opus-5-5",
+    "value": "Opus 5.5",
+    "readOnly": false,
+    "vendor": "厂商：Anthropic",
+    "width": 390,
+    "height": 844,
+    "scrollWidth": 390
+  }
+]

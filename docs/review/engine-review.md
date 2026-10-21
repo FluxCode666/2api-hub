@@ -229,3 +229,22 @@ worker 测试全部改用独立库 **hub_test**（`test/setup.ts`：DATABASE_URL
 - `pnpm --filter @hub/worker test`（hub_test）：**4 文件 26 用例全过**（aggregate 7 + scheduler 6 + probes 5 + tasks 8），含零样本、lease 生命周期、备用模型、降频边界、Key 脱敏新用例。
 - `aggregate:once`（开发库）：channel_stats=34、site_stats=14、failed=0、~180ms（34=仅 approved 站点渠道）。
 - 重启验证：SIGINT 优雅停旧实例 → `nohup pnpm --filter @hub/worker start` 重启 → 观察 2 分钟：3 轮聚合（failed=0）、8 次探测全成功、healthz/metrics 正常、无任何报错；手动插入任务 #89 完整流转（lease 写入 → 报告 task_id=89 → done 后 lease 清理）。
+
+
+## probe 修复记录（GLM，2026-10-22 二轮修复）
+
+范围：`packages/probe/**`、`apps/mock-upstream/**`（worker/API 的问题 #2–#5、#7–#10、#13–#16 由对应负责人处理）。
+
+| 问题 | 修复 | 验证 |
+| --- | --- | --- |
+| P1 #1 脱敏（截断顺序 / 长度门槛） | 新增 `redactThenTruncate` 统一出口：先脱敏再截断；Key 精确替换门槛 ≥8 → **≥4**；sample/detail/evidence/listUpstreamModels 错误统一走该出口 | 审查复现用例 `x.repeat(290)+LONGDUMMYSECRET...` 断言输出不含 `LONGDUMMYS` 前缀、含 `[REDACTED]`；`xyz12`（5 字符）精确替换；新增 5 项测试 |
+| P1 #6 总预算 | `probeAuthenticity` 入口总 deadline + `AbortSignal.any` 组合 signal（前移到 DNS 校验之前）；子请求/读取/重试退避（可中断 sleep）共享剩余预算；quick 强制 60s、非 quick 默认 180s（`totalBudgetMs` 可配）；预算耗尽 → 剩余检查 `passed:null`「检测时间预算耗尽，本项未执行」 | 审查「每请求 13s」复现：quick 检测实测 **60.0s** 截止（旧 65.0s，超 SPEC 上限），剩余检查全部 null 且 detail 标注预算耗尽；`probeAvailability` 3s 超时正确归类 `timeout`（修复 `TimeoutError` cause 未识别为 timeout 的归类缺陷） |
+| P1 #6 TTFT 20s | 独立 TTFT 计时：首内容 token 20s 未到 → 中止流判 `timeout`；`expectText:false`（纯工具调用探测）豁免——capability 合法响应可能只有 thinking+tool_use 无文本 delta，误用 TTFT 会把真实模型的 capability 打成超时（修复中发现并解决） | capability 检查在 8 场景中恢复 ✓（此前 20s TTFT timer 误杀纯 tool_use 流） |
+| P2 #11 能力检查请求非法 | anthropic `budget_tokens 1024 < max_tokens 2048`（旧 1024≥256 被 400）；openai_responses tools 改顶层 `{type:'function',name,parameters}` | mock 严格校验上线：非法 thinking 预算 → 400、嵌套 function 结构 → 400；probe 新结构 200。四组 curl 验证 + typecheck |
+| P2 #12 流内失败终态 | 四协议识别 OpenAI `error` / `response.failed` / Anthropic `error` / Gemini `error` → `invalid_response` | 审查复现四例（先 pong 再发错误事件）全部 `success:false + invalid_response`（旧实现全 true） |
+| P2 #12 类型校验 | `asString`/`asTokenCount`：非字符串按缺失；token 必须有限非负（负数/NaN → null）；`modelEchoMatches` 防御非字符串 | `model:42, id:42` 不再抛 `TypeError`（旧复现直接抛错）；`prompt_tokens:-5` → null |
+| P2 #12 空 tool_calls | `success` 判定要求非空 toolCalls 数组 | `tool_calls:[]` 无文本 → 失败（旧成功） |
+| P2 #12 异常兜底 | `consumeStream` 异常路径 `reader.cancel()`；三个公开函数外层 try/catch 绝不抛异常（内部错误降级 unknown 报告） | 154 项测试全过 |
+| mock / TLS fixture | `MOCK_HOST` 环境变量（默认 127.0.0.1）；TLS 测试证书移入 `packages/probe/test/fixtures/`（README 含 openssl 重建命令）；自签证书用例直连 127.0.0.1（修 localhost→::1 的 ECONNREFUSED 假阳性）并断言具体错误码 | `DEPTH_ZERO_SELF_SIGNED_CERT` 精确断言通过 |
+
+**最终验证**：`pnpm --filter @hub/probe test` 154/154 通过；probe + mock-upstream typecheck 通过；8 场景结果——genuine 100 / fast 95 / slow 95 / flaky 100 / ratelimited 100 全部 genuine，downgraded 57 suspect（token_count 差分法 + reasoning + capability 三重命中），fake 25 fake，dead null unknown。mock-upstream 已重启（PID 见 8712 端口，日志 `/tmp/2apihub-logs/mock.log`）。

@@ -36,6 +36,9 @@ export interface StreamRequestPayload {
   maxTokens?: number;
   /** 附加字段（如 tools、thinking 配置） */
   extra?: Record<string, unknown>;
+  /** 是否预期文本响应（默认 true）。纯工具调用探测置 false：合法响应可能无文本 delta，
+   * 不做 TTFT 超时（P1#6/P2#11 配套）。不会被序列化进请求体。 */
+  expectText?: boolean;
 }
 
 export interface BuiltRequest {

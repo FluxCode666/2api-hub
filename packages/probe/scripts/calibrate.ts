@@ -8,7 +8,7 @@
  *     --key sk-ant-xxx --protocol anthropic --model claude-sonnet-5-5 [--runs 5] [--vendor anthropic]
  */
 import { BENCHMARK_TEXT, O200K_BENCHMARK_TOKENS, TOKEN_COUNT_TOLERANCE, VENDOR_CALIBRATION } from '../src/calibration.ts';
-import { getAdapter, type ProtocolCapture } from '../src/adapters.ts';
+import { getAdapter, emptyCapture } from '../src/adapters.ts';
 import { redactThenTruncate, redactWithKey } from '../src/types.ts';
 import { safeFetch, readBodyLimited } from '../src/http.ts';
 import { SseParser } from '../src/sse.ts';
@@ -101,11 +101,7 @@ async function measure(args: CliArgs, userText: string): Promise<OneRun> {
       return { inputTokens: null, ok: false, error: redactThenTruncate(text, args.apiKey, 150) };
     }
     // 流式消费，取 usage
-    const capture: ProtocolCapture = {
-      text: '', thinkingText: null, thinkingSignature: null, modelEcho: null,
-      inputTokens: null, outputTokens: null, shapeOk: null, shapeDetail: '',
-      toolCalls: null, eventSequence: [], responseId: null, stopReason: null, raw: null,
-    };
+    const capture = emptyCapture();
     const firstTokenAt = { atMs: null as number | null };
     const parser = new SseParser();
     const reader = res.body?.getReader();

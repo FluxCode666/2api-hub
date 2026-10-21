@@ -1,0 +1,8 @@
+{
+  "url": "http://127.0.0.1:3210/rankings?model=claude-opus-5-5",
+  "value": "Opus 5.5",
+  "readOnly": false,
+  "vendor": "厂商：Anthropic",
+  "width": 1332,
+  "scrollWidth": 1332
+}

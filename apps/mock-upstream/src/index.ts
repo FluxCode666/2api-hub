@@ -351,7 +351,10 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const model = geminiAction ? geminiAction.model : extracted.model;
-    const stream = geminiAction ? geminiAction.stream || extracted.stream : extracted.stream;
+    let stream = extracted.stream;
+    if (geminiAction) {
+      stream = geminiAction.stream || extracted.stream;
+    }
 
     // 生成回复与 usage
     const decision = generateReply(extracted.inputText, model, scenario);
