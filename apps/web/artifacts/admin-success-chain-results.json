@@ -1,0 +1,141 @@
+{
+  "startedAt": "2026-10-21T17:42:20Z",
+  "checks": [
+    {
+      "label": "独立新账号注册与登录会话",
+      "status": "PASS",
+      "detail": {
+        "id": "9be13338-9f08-499e-a336-0289ffdf84e7",
+        "role": "user"
+      }
+    },
+    {
+      "label": "独立草稿站点和渠道创建",
+      "status": "PASS",
+      "detail": {
+        "siteId": 15,
+        "channelId": 35,
+        "siteStatus": "draft",
+        "probeEnabled": false
+      }
+    },
+    {
+      "label": "成功入驻链执行",
+      "status": "RESOLVED",
+      "detail": "初次连接测试未成功：network",
+      "resolution": "probe改用与Agent同版本的undiciFetch后，复测连接成功"
+    },
+    {
+      "label": "本地上游真实连接成功",
+      "status": "PASS",
+      "detail": {
+        "success": true,
+        "latencyMs": 53,
+        "httpStatus": 200
+      }
+    },
+    {
+      "label": "修改Key清除旧连接测试状态",
+      "status": "PASS",
+      "detail": {
+        "lastTestOk": null,
+        "lastTestAt": null
+      }
+    },
+    {
+      "label": "关键配置变化后未重测禁止提交",
+      "status": "PASS",
+      "detail": {
+        "httpStatus": 400,
+        "siteStatus": "draft"
+      }
+    },
+    {
+      "label": "重新测试恢复连接成功状态",
+      "status": "PASS",
+      "detail": {
+        "success": true,
+        "latencyMs": 57
+      }
+    },
+    {
+      "label": "真实发现模型并映射标准目录",
+      "status": "PASS",
+      "detail": {
+        "modelCount": 18,
+        "primaryModelId": 89,
+        "primaryModelSlug": "gpt-6.1-sol"
+      }
+    },
+    {
+      "label": "保留单一主测模型用于独立检测",
+      "status": "PASS",
+      "detail": {
+        "models": [
+          "gpt-6.1-sol"
+        ],
+        "preservedModelId": 89
+      }
+    },
+    {
+      "label": "满足前置条件后提交审核并创建任务",
+      "status": "PASS",
+      "detail": {
+        "siteId": 15,
+        "siteStatus": "pending",
+        "taskIds": [
+          1
+        ],
+        "observedStatuses": [
+          "queued"
+        ],
+        "executionTerminalVerified": false
+      }
+    }
+  ],
+  "resources": {
+    "userId": "9be13338-9f08-499e-a336-0289ffdf84e7",
+    "email": "admin-success-1792604540@integration.example",
+    "siteId": 15,
+    "siteSlug": "admin-success-site-1792604541",
+    "channelId": 35,
+    "onboardingTaskIds": [
+      1
+    ],
+    "siteStatus": "pending"
+  },
+  "taskExecution": "queued_or_running_without_terminal_claim",
+  "retained": [
+    {
+      "kind": "user",
+      "id": "9be13338-9f08-499e-a336-0289ffdf84e7",
+      "role": "user",
+      "reason": "独立成功链账号；无删除API"
+    },
+    {
+      "kind": "site",
+      "id": 15,
+      "channelId": 35,
+      "status": "pending",
+      "probeEnabled": false,
+      "reason": "等待worker执行终态与管理员审核链"
+    }
+  ],
+  "updatedAt": "2026-10-21T17:46:05Z",
+  "passed": 9,
+  "failed": 0,
+  "resolvedEnvironmentIssue": {
+    "cause": "Node22内建undici6与probe外部undici8 Agent不兼容",
+    "originalError": "UND_ERR_INVALID_ARG: invalid onRequestStart method",
+    "fixedBy": "probe统一使用undiciFetch与Agent",
+    "verifiedAt": "2026-10-21T17:46:05Z"
+  },
+  "tasks": [
+    {
+      "id": 1,
+      "kind": "authenticity",
+      "trigger": "onboarding",
+      "status": "queued"
+    }
+  ]
+}

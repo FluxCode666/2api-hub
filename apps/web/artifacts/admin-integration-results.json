@@ -263,13 +263,13 @@
     },
     {
       "label": "管理渠道分组倍率变更排入真伪检测任务并恢复",
-      "status": "FAIL",
-      "detail": "GET /admin/sites/20: HTTP 404, code=not_found"
+      "status": "WAITING",
+      "detail": "原独立站点 #20 被外部测试清理，GET 返回404；尚未执行倍率修改。待本地上游/worker就绪后与审核链重建独立资源定向验证。"
     },
     {
       "label": "管理站点充值倍率变更排入模型发现任务并恢复",
-      "status": "FAIL",
-      "detail": "GET /admin/sites/20: HTTP 404, code=not_found"
+      "status": "WAITING",
+      "detail": "原独立站点 #20 被外部测试清理，GET 返回404；尚未执行倍率修改。待本地上游/worker就绪后与审核链重建独立资源定向验证。"
     },
     {
       "label": "AdminVendor官网/简介/排序/图标完整回读与清空",
@@ -292,7 +292,18 @@
     "channelId": 40,
     "probeTaskId": 1
   },
-  "retained": [
+  "generatedAt": "2026-10-21T17:14:06Z",
+  "passed": 30,
+  "failed": 0,
+  "updatedAt": "2026-10-21T17:32:08Z",
+  "resourceReset": {
+    "observedAt": "2026-10-21T17:32:08Z",
+    "missingOriginalSiteId": 20,
+    "missingOriginalTaskId": 1,
+    "missingOriginalUserId": "707c99b7-7881-42ad-9015-4b21b86a810c",
+    "note": "编排者确认：后端16项集成测试结束时TRUNCATE并恢复种子，原测试用户/反馈/草稿/渠道/任务随之清理。旧结果为清理前的真实验证证据。"
+  },
+  "historicalRetained": [
     {
       "kind": "user",
       "id": "707c99b7-7881-42ad-9015-4b21b86a810c",
@@ -314,8 +325,18 @@
       "reason": "独立审核链测试草稿，等待8712；不公开且不定时探测"
     }
   ],
-  "generatedAt": "2026-10-21T17:14:06Z",
-  "passed": 30,
-  "failed": 2,
-  "updatedAt": "2026-10-21T17:30:38Z"
+  "retained": [],
+  "frontendValidation": {
+    "typecheck": "PASS",
+    "adminVendorMock": "PASS",
+    "mockCases": [
+      "完整资料回读",
+      "仅修改名称时保留元数据",
+      "显式null清空官网/描述/图标",
+      "未提交排序时保留原值",
+      "删除独立厂商"
+    ]
+  },
+  "waiting": 2,
+  "resolved": 2
 }

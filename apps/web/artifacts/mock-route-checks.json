@@ -1,7 +1,7 @@
 {
   "mode": "mock",
   "origin": "http://127.0.0.1:3210",
-  "checkedAt": "2026-10-21T17:12:24.434Z",
+  "checkedAt": "2026-10-21T17:33:09.426Z",
   "results": [
     {
       "group": "public",
@@ -333,7 +333,7 @@
     },
     {
       "group": "admin",
-      "path": "/admin/sites/15",
+      "path": "/admin/sites/13",
       "status": 200,
       "expected": 200,
       "runtimeError": false,

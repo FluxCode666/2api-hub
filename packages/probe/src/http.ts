@@ -11,7 +11,7 @@
  * 3. 重定向不自动跟随（redirect: 'manual'），由上层校验后再发起；
  * 4. 响应体上限 2MB。
  */
-import { Agent } from 'undici';
+import { Agent, fetch as undiciFetch, type RequestInit as undiciRequestInit, type Response as UndiciResponse } from 'undici';
 import { isIP } from 'node:net';
 import { lookup } from 'node:dns/promises';
 import { assertSafeUrlImpl, isPrivateIp } from './ssrf.js';
@@ -120,7 +120,7 @@ export function getAgent(allowPrivate: boolean): Agent {
  * 连接层再复核（防 TOCTOU），重定向不自动跟随。
  * URL 来源为渠道登记的 base_url（外部输入），必须经由本函数的双重校验后才能发出请求。
  */
-export async function safeFetch(opts: SafeFetchOptions): Promise<Response> {
+export async function safeFetch(opts: SafeFetchOptions): Promise<UndiciResponse> {
   const allowPrivate = opts.allowPrivate ?? process.env.ALLOW_PRIVATE_PROBE === 'true';
   // 第一层：入口校验——未通过的 URL 直接抛 SsrfBlockError，fetch 不会执行
   await assertSafeUrlImpl(opts.url, allowPrivate);
@@ -130,7 +130,7 @@ export async function safeFetch(opts: SafeFetchOptions): Promise<Response> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = opts.signal ? AbortSignal.any([opts.signal, timeoutSignal]) : timeoutSignal;
-  const init: RequestInit = {
+  const init: undiciRequestInit = {
     method: (opts.method ?? 'GET').toUpperCase(),
     headers: opts.headers,
     body: opts.body,
@@ -138,10 +138,11 @@ export async function safeFetch(opts: SafeFetchOptions): Promise<Response> {
     redirect: 'manual',
   };
   try {
-    // SAFETY: undici 的 fetch 支持非标准 init.dispatcher 字段（指定连接层 Agent）；
-    // lib.dom RequestInit 类型不含该字段，运行时由 undici 读取，不影响类型安全。
-    // Agent 本身即 Dispatcher 实现，双重断言仅为通过 DOM RequestInit 类型检查。
-    return await fetch(url, { ...init, dispatcher: agent } as RequestInit & { dispatcher?: Agent });
+    // 用 undici 自带的 fetch（支持 init.dispatcher 扩展字段）：Node 全局 fetch 内置的
+    // undici 与 npm undici 8 跨版本传 Agent 会报 invalid onRequestStart method。
+    // SAFETY: dispatcher 是 undici fetch 的非标准扩展（lib.dom RequestInit 不含），
+    // 运行时由 undici 读取；Agent 本身即 Dispatcher 实现。
+    return await undiciFetch(url, { ...init, dispatcher: agent });
   } catch (err) {
     if (err instanceof Error && /私网|保留地址/.test(err.message)) {
       throw new SsrfBlockError(err.message);
@@ -151,7 +152,7 @@ export async function safeFetch(opts: SafeFetchOptions): Promise<Response> {
 }
 
 /** 读取响应体（限 MAX_RESPONSE_BYTES，超限截断并标记） */
-export async function readBodyLimited(res: Response): Promise<{ text: string; truncated: boolean }> {
+export async function readBodyLimited(res: UndiciResponse): Promise<{ text: string; truncated: boolean }> {
   const reader = res.body?.getReader();
   if (!reader) return { text: '', truncated: false };
   const chunks: Uint8Array[] = [];

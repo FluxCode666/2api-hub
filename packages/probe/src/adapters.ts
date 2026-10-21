@@ -573,7 +573,7 @@ export function getAdapter(protocol: ChannelProtocol): ProtocolAdapter {
  * 返回 null 表示响应体不是合法 SSE 流（invalid_response）。
  */
 export async function consumeStream(
-  res: Response,
+  res: { body: ReadableStream<Uint8Array> | null },
   adapter: ProtocolAdapter,
   capture: ProtocolCapture,
   firstTokenAt: FirstTokenMark,

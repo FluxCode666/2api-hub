@@ -25,7 +25,7 @@ export async function serverApi<T>(path: string, options: RequestInit = {}): Pro
   if (cookie) headers.set('Cookie', cookie);
   if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   const origin = (process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:8711').replace(/\/$/, '');
-  const response = await fetch(`${origin}/api/v1${apiPath(path)}`, { ...options, headers, cache: options.cache ?? 'no-store' });
+  const response = await fetch(`${origin}/api/v1${apiPath(path)}`, { ...options, headers, cache: 'no-store' });
   return readResponse<T>(response);
 }
 

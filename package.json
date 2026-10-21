@@ -3,18 +3,26 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "pnpm@10.30.2",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
+    "dev": "concurrently -n mock,api,worker,web -c magenta,yellow,blue,cyan \"pnpm dev:mock\" \"pnpm dev:api\" \"pnpm dev:worker\" \"pnpm dev:web\"",
     "dev:web": "pnpm --filter @hub/web dev",
     "dev:api": "pnpm --filter @hub/api dev",
     "dev:worker": "pnpm --filter @hub/worker dev",
     "dev:mock": "pnpm --filter @hub/mock-upstream dev",
+    "setup:local": "pnpm db:up && pnpm db:wait && pnpm db:migrate && pnpm db:seed",
     "db:up": "docker compose up -d postgres",
+    "db:wait": "node -e \"const{execSync}=require('node:child_process');for(let i=0;i<40;i++){try{execSync('docker exec hub-postgres pg_isready -U hub',{stdio:'pipe'});console.log('postgres 就绪');process.exit(0)}catch{require('node:child_process').execSync('sleep 2')}}console.error('等待超时');process.exit(1)\"",
     "db:generate": "pnpm --filter @hub/db generate",
     "db:migrate": "pnpm --filter @hub/db migrate",
     "db:seed": "pnpm --filter @hub/db seed",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
   }
 }

@@ -1,0 +1,113 @@
+{
+  "checkedAt": "2026-10-21T17:51:54.176Z",
+  "checks": [
+    {
+      "path": "/_next/static/media/GeistMono_Variable.p.074yowjdp83r3.woff2",
+      "status": 200,
+      "bytes": 71236,
+      "type": "font/woff2"
+    },
+    {
+      "path": "/_next/static/media/Geist_Variable-s.p.142kz3f7gseln.woff2",
+      "status": 200,
+      "bytes": 69492,
+      "type": "font/woff2"
+    },
+    {
+      "path": "/_next/static/chunks/3o1it3f4vccci.css",
+      "status": 200,
+      "bytes": 0,
+      "type": "text/css; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/1cq1qj4xeth47.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/0_6jkbpk-fw45.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/2whwbpfir5llt.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/20k-2o41t76sl.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/turbopack-2c3mg3r-05n1w.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/1c33bm6y-3jpg.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/3727-02i72m06.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/3fcgsexm3or-9.js",
+      "status": 200,
+      "bytes": 585,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/3v83ec6pta-c3.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/069_y1pj1t5u7.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/1_l9zheu39rx_.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/_next/static/chunks/0cz1d0mv5g_q7.js",
+      "status": 200,
+      "bytes": 0,
+      "type": "application/javascript; charset=UTF-8"
+    },
+    {
+      "path": "/fonts/og/Geist-Regular.ttf",
+      "status": 200,
+      "type": "font/ttf",
+      "location": null
+    },
+    {
+      "path": "/fonts/og/NotoSansSC-Regular.woff",
+      "status": 200,
+      "type": "font/woff",
+      "location": null
+    },
+    {
+      "path": "/go/1",
+      "status": 302,
+      "type": null,
+      "location": "https://www.xingheapi.com/register?aff=2apihub"
+    }
+  ]
+}

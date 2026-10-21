@@ -1,7 +1,7 @@
 {
   "mode": "real",
   "origin": "http://127.0.0.1:3210",
-  "checkedAt": "2026-10-21T17:17:01.569Z",
+  "checkedAt": "2026-10-21T17:51:55.825Z",
   "results": [
     {
       "group": "public",
@@ -189,7 +189,7 @@
     },
     {
       "group": "merchant",
-      "path": "/merchant/sites/4",
+      "path": "/merchant/sites/6",
       "status": 200,
       "expected": 200,
       "runtimeError": false,
@@ -197,7 +197,7 @@
     },
     {
       "group": "merchant",
-      "path": "/merchant/sites/4/edit",
+      "path": "/merchant/sites/6/edit",
       "status": 200,
       "expected": 200,
       "runtimeError": false,
@@ -205,7 +205,7 @@
     },
     {
       "group": "merchant",
-      "path": "/merchant/onboarding?siteId=4",
+      "path": "/merchant/onboarding?siteId=6",
       "status": 200,
       "expected": 200,
       "runtimeError": false,
@@ -213,7 +213,7 @@
     },
     {
       "group": "merchant",
-      "path": "/merchant/channels/10",
+      "path": "/merchant/channels/15",
       "status": 200,
       "expected": 200,
       "runtimeError": false,
@@ -333,7 +333,7 @@
     },
     {
       "group": "admin",
-      "path": "/admin/sites/14",
+      "path": "/admin/sites/16",
       "status": 200,
       "expected": 200,
       "runtimeError": false,

@@ -1,0 +1,130 @@
+# 2API Hub 生产部署（api + worker + web + postgres）
+# 用法：docker compose -f deploy/docker-compose.prod.yml \
+#   --env-file deploy/.env.prod up -d
+# mock-upstream 仅在 demo profile 中启动：追加 --profile demo
+
+name: hub-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: hub-prod-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必须设置}
+      POSTGRES_DB: ${POSTGRES_DB:-hub}
+    volumes:
+      - hub-prod-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hub}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [hub]
+
+  # 一次性迁移 job：api 启动前执行
+  migrate:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: hub-prod-migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: >-
+        postgres://${POSTGRES_USER:-hub}:${POSTGRES_PASSWORD}
+        @postgres:5432/${POSTGRES_DB:-hub}
+    command: ["./node_modules/.bin/tsx", "packages/db/src/migrate.ts"]
+    networks: [hub]
+    restart: "no"
+
+  api:
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: hub-prod-api
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: >-
+        postgres://${POSTGRES_USER:-hub}:${POSTGRES_PASSWORD}
+        @postgres:5432/${POSTGRES_DB:-hub}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?必须设置，openssl rand -hex 32}
+      SESSION_SECRET: ${SESSION_SECRET:?必须设置}
+      API_PORT: 8711
+      ALLOW_PRIVATE_PROBE: ${ALLOW_PRIVATE_PROBE:-false}
+    ports:
+      - "${API_PORT:-8711}:8711"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8711/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [hub]
+
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    container_name: hub-prod-worker
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: >-
+        postgres://${POSTGRES_USER:-hub}:${POSTGRES_PASSWORD}
+        @postgres:5432/${POSTGRES_DB:-hub}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
+      WORKER_HEALTH_PORT: 8713
+      ALLOW_PRIVATE_PROBE: ${ALLOW_PRIVATE_PROBE:-false}
+    ports:
+      - "${WORKER_HEALTH_PORT:-8713}:8713"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8713/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks: [hub]
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        HUB_SITE_URL: ${HUB_SITE_URL:-https://2api.hub}
+    container_name: hub-prod-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      API_INTERNAL_URL: http://api:8711
+      WEB_PORT: 3210
+      HUB_SITE_URL: ${HUB_SITE_URL:-https://2api.hub}
+    ports:
+      - "${WEB_PORT:-3210}:3210"
+    networks: [hub]
+
+  mock-upstream:
+    profiles: ["demo"]
+    build:
+      context: ..
+      dockerfile: apps/mock-upstream/Dockerfile
+    container_name: hub-prod-mock
+    restart: unless-stopped
+    environment:
+      MOCK_UPSTREAM_PORT: 8712
+    ports:
+      - "${MOCK_UPSTREAM_PORT:-8712}:8712"
+    networks: [hub]
+
+networks:
+  hub:
+
+volumes:
+  hub-prod-pg:

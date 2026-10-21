@@ -41,6 +41,17 @@ Mock 账号：管理员 `admin@2api.hub / admin123456`、站长 `merchant@2api.h
 
 数据页优先扫读，数字等宽、状态语义统一。榜单筛选压缩为两行，次级条件折叠；输入防抖 300ms，其余条件即时生效。1440×900 实测表格从约 335px 开始，首屏完整显示 7 行；表头滚动后保持在导航下方 81px。390px 改为渠道卡片。
 
+## SEO、分享与缓存
+
+- 所有公开页面提供独立 `generateMetadata`、description、canonical、简体中文 Open Graph 与 Twitter 大图信息。模型摘要包含最低输入价、渠道数和最佳可用率；站点与渠道摘要包含真实价格/倍率、渠道与模型数量、可用率和用户评价。无样本明确显示待采样，不将空数据当作 0%。
+- 部署时设置 `HUB_SITE_URL`（或 `NEXT_PUBLIC_SITE_URL`）为真实公开域名；默认 `https://2api.hub`。canonical 和 sitemap 使用统一 origin，并移除筛选查询，避免重复收录。
+- `/sitemap.xml` 通过公开 API 分页收集所有模型、厂商、已上线站点与渠道。当前种子数据共 79 个唯一 URL；不包含私有页面、登录注册和临时对比。`/robots.txt` 禁止 `/merchant`、`/admin`、`/me`、`/api`、登录注册与跳转路径；认证页和个人中心额外带 noindex。
+- JSON-LD：首页 `WebSite + SearchAction`；模型页对应当前榜单的 `ItemList`；站点页 `Organization`，有有效评价时才附加 `AggregateRating`；指南页 `FAQPage` 与可见问答使用同一份内容。JSON 序列化转义 `<`，防止内容中断 script。
+- 分享图固定路径：`/opengraph-image`、`/models/[slug]/opengraph-image`、`/sites/[slug]/opengraph-image`。三个路由均使用 `ImageResponse` 生成 1200×630 PNG，沿用暗墨绿/薄荷绿设计。本地 Geist 与 Noto Sans SC 字体和许可证位于 `apps/web/public/fonts/og/`，生成过程不依赖外网字体；未知详情回退品牌图。
+- 公共数据使用不读取 Cookie 的 `publicApi`，榜单与探测数据 60 秒、目录 300 秒；首页 ISR 60 秒，厂商目录和鉴定页 300 秒，站点/渠道详情按需静态生成并以 60 秒刷新。带 URL 筛选的页面保留动态渲染，同时复用 Data Cache。私有 `serverApi` 强制 no-store。
+- 收藏通过客户端共享请求读取，公共缓存不含当前用户收藏；`/me` 保留私有初值。通过同源 API 修改公开资料或评价会立即失效公共标签、公开布局和 sitemap。Next 的 API rewrite 位于 fallback，确保写入先经过 Route Handler 的失效逻辑。
+- 验证脚本：`node apps/web/scripts/check-seo.mjs`，25 项检查在开发和生产模式均通过，覆盖独立摘要、结构化数据、sitemap/robots 和三类 PNG。生产模式已确认首页/目录缓存 HIT，站点与渠道首次 MISS、再次 HIT；结果为 `artifacts/seo-checks.json`、`isr-production-checks.json`，分享图预览为 `og-home.png`、`og-model.png`、`og-site.png`。
+
 ## 已做验证
 
 - TypeScript strict 类型检查与 `HUB_MOCK=0` 生产构建通过。
@@ -72,10 +83,11 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 | 允许四项评分权重全 0 | 推荐分计算可能出现 0 分母 | 后端已修，拒绝全零且保留原值的真实复测通过 |
 | 管理厂商仅返回公开摘要，缺官网/简介/排序 | 编辑时无法完整回显已有资料 | 编排者批准 AdminVendor；前端/Mock 已接入，真实完整回读、部分更新保留和显式 null 清空均通过 |
 | 原始 SQL 的 created_at 实际为字符串 | `/sites` 500 | 后端已修复并真实复测 200 |
+| probe 的外部 undici Agent 与 Node 内置 fetch 不兼容 | 上游直连正常，API 的连接测试/鉴定仍报 network | 已给检测负责人具体 `UND_ERR_INVALID_ARG / invalid onRequestStart method` 证据，待修复后续跑 |
 
 `GET /me/reviews` 与 `DELETE /me/reviews/:id` 已获批准，`MyReview` 已进入共享契约，前端与 Mock 均已接入；真实创建、同站更新、分页、越权拒绝、本人删除及重复删除 404 均已通过。测试收藏与评价已清理，因无删除用户接口保留一个无业务数据的测试账号。
 
-真实公开/用户接口最近完整检查为 23 通过、1 失败、1 跳过；其中失败的 stableOnly=false 随后定向复测已通过，实际鉴定仍待上游。管理接口最近完整检查为 26 通过、2 失败；两项字段保存失败随后均已修复并真实复测通过，另补测全零权重拒绝及 AdminVendor 完整资料通过。管理检查包含独立目录/公告 CRUD、用户角色/封禁恢复、反馈、评分保存恢复、审计与检测任务排队 202。测试权重已恢复；原独立草稿站点 #20 随后已不可读取，倍率排队和完整审核链将以新独立资源补测。
+真实公开/用户接口最近完整检查为 23 通过、1 失败、1 跳过；其中失败的 stableOnly=false 随后定向复测已通过，实际鉴定仍待成功连接。管理定向复测完成后共 30 项通过、0 项失败、2 项待补测（倍率排队）。管理检查包含独立目录/公告 CRUD、用户角色/封禁恢复、反馈、评分保存恢复、审计与检测任务排队 202。测试权重已恢复；原独立草稿站点 #20 / 渠道 #40 等随后端集成测试的种子恢复清理。成功链已新建独立草稿站点 #15 / 渠道 #35，待探测连接修复后续跑。
 
 真实桌面截图已覆盖首页、榜单、渠道详情、入驻向导和管理审核；390px 截图已覆盖首页、榜单、渠道详情、向导和审核，无文档横向溢出，页面捕获的运行错误为空。真实历史图表已在浏览器切换近 7 天和近 1 小时，数据加载与选中态正常。真实榜单暂无统计数据的状态已确认正常显示；首页未收到探测样本时显示「等待探测」。截图为 `apps/web/artifacts/*-real-*.png`。
 

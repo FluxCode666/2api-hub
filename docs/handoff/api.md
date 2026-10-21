@@ -46,6 +46,18 @@ pnpm --filter @hub/api test       # vitest 16 个集成测试通过（结束后�
 - **设置**：`scoring.weights` 全 0 会被 zod refine 拒绝（权重和必须 > 0）。
 - **raw SQL 时间字段**：`db.execute` 返回的 timestamp 是 string，统一在序列化层转 ISO。
 
+## 部署与工程化（第二个任务）
+
+- `pnpm dev`：concurrently 一键启动 mock/api/worker/web（彩色前缀）
+- `pnpm setup:local`：db:up → 等待健康 → migrate → seed
+- `apps/api/Dockerfile`、`apps/worker/Dockerfile`、`apps/mock-upstream/Dockerfile`、`apps/web/Dockerfile`：多阶段，pnpm workspace 裁剪，tsx 运行 TS 源码
+- `deploy/docker-compose.prod.yml`：postgres + migrate（一次性 job）+ api + worker + web，mock-upstream 在 demo profile
+- `deploy/prod.env.example`：环境变量模板（`ALLOW_PRIVATE_PROBE=false`，密钥 `openssl rand -hex 32`）
+- `README.md`：中文，含 mermaid 架构图、快速开始、账号、端口、部署步骤
+- `docker build` api 和 worker 镜像均成功
+- **需要前端配合**：`apps/web/next.config.ts` 需加 `output: 'standalone'`（web Dockerfile 按此设计）
+- Docker Hub 在本机被墙，通过 `docker.m.daocloud.io` 镜像加速器拉取 `node:22-alpine` 后 `docker tag` 为本地镜像
+
 ## 已知问题 / 依赖
 
 - mock-upstream（8712）未启动时，连接测试返回 `network` 错误（符合预期）；worker 启动后 channel_stats/site_stats 会有数据。

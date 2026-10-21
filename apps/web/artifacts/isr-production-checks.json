@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-10-21T17:44:23.847Z",
+  "checks": [
+    {
+      "path": "/",
+      "status": 200,
+      "first": "HIT",
+      "second": "HIT",
+      "cacheControl": "s-maxage=60, stale-while-revalidate=31535940"
+    },
+    {
+      "path": "/vendors",
+      "status": 200,
+      "first": "HIT",
+      "second": "HIT",
+      "cacheControl": "s-maxage=300, stale-while-revalidate=31535700"
+    },
+    {
+      "path": "/verify",
+      "status": 200,
+      "first": "HIT",
+      "second": "HIT",
+      "cacheControl": "s-maxage=300, stale-while-revalidate=31535700"
+    },
+    {
+      "path": "/sitemap.xml",
+      "status": 200,
+      "first": "HIT",
+      "second": "HIT",
+      "cacheControl": "public, max-age=0, must-revalidate"
+    },
+    {
+      "path": "/sites/xinghe-api",
+      "status": 200,
+      "first": "MISS",
+      "second": "HIT",
+      "cacheControl": "s-maxage=60, stale-while-revalidate=31535940"
+    },
+    {
+      "path": "/channels/1",
+      "status": 200,
+      "first": "MISS",
+      "second": "HIT",
+      "cacheControl": "s-maxage=60, stale-while-revalidate=31535940"
+    }
+  ]
+}
