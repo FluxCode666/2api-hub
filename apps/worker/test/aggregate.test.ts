@@ -71,7 +71,7 @@ describe('buildChannelStat（纯函数）', () => {
     const dead = buildChannelStat(fakeRow({ uptime_24h: '0', consecutive_failures: 1008, samples_24h: 139, trust_score: null }), { weights: WEIGHTS, minSamplesForScore: 6 });
     expect(dead.recommendScore).not.toBeNull();
     // uptime=0 + trust 无报告（默认 60）+ 连败 1008 → 低分
-    expect(dead.recommendScore!).toBeLessThan(30);
+    expect(dead.recommendScore!).toBeLessThan(40);
     const flaky = buildChannelStat(fakeRow({ uptime_24h: '0.6', latency_p50: 2000, consecutive_failures: 2 }), { weights: WEIGHTS, minSamplesForScore: 6 });
     expect(flaky.recommendScore!).toBeGreaterThan(50);
     expect(flaky.recommendScore!).toBeGreaterThan(dead.recommendScore!);

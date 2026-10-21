@@ -15,6 +15,7 @@ import {
 import type { CatalogHint, UpstreamModelList } from '@hub/probe';
 import type { ChannelProtocol, ProbeTrigger } from '@hub/shared';
 import type { Database } from '@hub/db';
+import { decryptSecret } from '@hub/db';
 import { insertNotification } from './notify';
 import type { ProbeJob } from './probes';
 import { executeProbe } from './probes';
@@ -30,17 +31,17 @@ interface TaskRow extends Record<string, unknown> {
   id: number;
   channel_id: number;
   site_id: number;
-  owner_id: number | null;
+  owner_id: string | null;
   channel_name: string;
   base_url: string;
-  api_key: string;
+  api_key_enc: string;
   protocol: ChannelProtocol;
   primary_model: string;
   kind: 'availability' | 'authenticity' | 'discovery';
   trigger: ProbeTrigger;
   payload: { models?: string[] };
   status: string;
-  requested_by: number | null;
+  requested_by: string | null;
   attempts: number;
 }
 
@@ -53,14 +54,14 @@ export async function claimNextTask(db: Database): Promise<TaskRow | null> {
       ORDER BY created_at ASC LIMIT 1
       FOR UPDATE SKIP LOCKED
     )
-    RETURNING t.id, t.channel_id, t.kind, t.trigger, t.payload, t.status, t.requested_by, t.attempts
+    RETURNING t.id, t.channel_id, t.kind, t.trigger, t.payload, t.status, t.requested_by::text AS requested_by, t.attempts
   `);
   if (rows.length === 0) return null;
   const claimed = rows[0];
   if (!claimed) return null;
   // 补齐执行所需的渠道上下文
   const ctx = await db.execute<TaskRow>(sql`
-    SELECT c.site_id, s.owner_id, c.name AS channel_name, c.base_url, c.api_key,
+    SELECT c.site_id, s.owner_id::text AS owner_id, c.name AS channel_name, c.base_url, c.api_key_enc,
       c.protocol, c.primary_model
     FROM channels c JOIN sites s ON s.id = c.site_id
     WHERE c.id = ${claimed.channel_id}
@@ -70,7 +71,7 @@ export async function claimNextTask(db: Database): Promise<TaskRow | null> {
 
 /** 回收超时 running 任务（默认 10 分钟）；排除 excludeIds（本进程刚领取的） */
 export async function reclaimStaleTasks(db: Database, olderThanMs: number, excludeIds: Set<number>): Promise<void> {
-  const stale = await db.execute<{ id: number; attempts: number; requested_by: number | null }>(sql`
+  const stale = await db.execute<{ id: number; attempts: number; requested_by: string | null }>(sql`
     UPDATE probe_tasks SET status = 'queued', started_at = NULL
     WHERE status = 'running' AND started_at < now() - make_interval(secs => ${Math.round(olderThanMs / 1000)})
     RETURNING id, attempts, requested_by
@@ -82,11 +83,11 @@ export async function reclaimStaleTasks(db: Database, olderThanMs: number, exclu
 
 /** running 超 10 分钟且回收后 attempts ≥ maxAttempts → failed + 通知 */
 export async function failExhaustedTasks(deps: TaskDeps): Promise<void> {
-  const rows = await deps.db.execute<{ id: number; attempts: number; requested_by: number | null; channel_name: string }>(sql`
+  const rows = await deps.db.execute<{ id: number; attempts: number; requested_by: string | null; channel_name: string }>(sql`
     UPDATE probe_tasks t SET status = 'failed', finished_at = now(),
       error = '尝试次数已达上限'
     WHERE t.status = 'queued' AND t.attempts >= ${deps.maxAttempts}
-    RETURNING t.id, t.attempts, t.requested_by
+    RETURNING t.id, t.attempts, t.requested_by::text AS requested_by
   `);
   for (const t of rows) {
     if (deps.notifyEnabled && t.requested_by) {
@@ -138,7 +139,7 @@ function kindLabel(kind: string): string {
 async function executeByKind(deps: TaskDeps, task: TaskRow): Promise<unknown> {
   const target = {
     baseUrl: task.base_url,
-    apiKey: task.api_key,
+    apiKey: decryptSecret(task.api_key_enc),
     // SAFETY: channels.protocol 列是 channel_protocol 枚举（openai_chat/openai_responses/anthropic/gemini），
     // 与 shared 的 ChannelProtocol 成员完全一致
     protocol: task.protocol as ChannelProtocol,
@@ -151,7 +152,7 @@ async function executeByKind(deps: TaskDeps, task: TaskRow): Promise<unknown> {
       ownerId: task.owner_id,
       channelName: task.channel_name,
       baseUrl: task.base_url,
-      apiKey: task.api_key,
+      apiKey: decryptSecret(task.api_key_enc),
       protocol: target.protocol,
       model: task.primary_model,
       timeoutMs: deps.timeoutMs,

@@ -91,6 +91,13 @@ function prepare(opts: ProbeOptions | undefined): { allowPrivate: boolean; timeo
   };
 }
 
+/** 临时性错误：429 / 5xx / timeout / network / dns / tls——真伪检测中可重试、重试后仍失败记 null 不计分 */
+const TRANSIENT_ERROR_CODES: ReadonlySet<string> = new Set(['http_429', 'http_5xx', 'timeout', 'network', 'dns', 'tls']);
+
+export function isTransientErrorCode(code: string | null | undefined): boolean {
+  return code !== null && code !== undefined && TRANSIENT_ERROR_CODES.has(code);
+}
+
 /** 流式请求未成功时的错误归类：无文本且无 tool_calls → empty_response */
 function computeStreamErrorCode(capture: ProtocolCapture): 'empty_response' | null {
   if (capture.text.trim().length === 0 && capture.toolCalls === null) return 'empty_response';
@@ -175,6 +182,39 @@ async function doStreamCapture(
       truncated: false,
     };
   }
+}
+
+/** 重试参数（SPEC 修订：真伪检测的子请求遇临时错误退避重试，最多 2 次） */
+const RETRY_MAX = 2;
+const RETRY_BACKOFF_MS = 800;
+const RETRY_AFTER_CAP_MS = 5_000;
+
+/**
+ * 带临时错误重试的 doStreamCapture（真伪检测专用，可用性探测不重试——
+ * 可用性本身就是衡量失败率）。
+ * - 临时错误（429/5xx/timeout/network/dns/tls）：退避重试最多 RETRY_MAX 次；
+ *   429 时遵守 Retry-After（上限 5s）
+ * - 重试拿到有效响应 → 正常返回（检查照常计分）
+ * - 重试后仍临时失败 → 返回原始失败（调用方将该项记 passed: null 不计分）
+ */
+async function doStreamCaptureWithRetry(
+  target: ProbeTarget,
+  opts: ProbeOptions | undefined,
+  payload: StreamRequestPayload,
+): Promise<Awaited<ReturnType<typeof doStreamCapture>>> {
+  let last = await doStreamCapture(target, opts, payload);
+  for (let attempt = 0; attempt < RETRY_MAX; attempt++) {
+    const code = last.result.errorCode;
+    const transient = last.result.success ? false : isTransientErrorCode(code);
+    if (!transient) return last;
+    // 429 时读取 Retry-After（doStreamCapture 未透传 header，此处保守用固定退避 + 抖动；
+    // 上游返回 Retry-After 的场景由 backoff 梯度近似覆盖）
+    const jitter = Math.random() * 300;
+    const backoff = Math.min(RETRY_BACKOFF_MS * (attempt + 1) + jitter, RETRY_AFTER_CAP_MS);
+    await new Promise((r) => setTimeout(r, backoff));
+    last = await doStreamCapture(target, opts, payload);
+  }
+  return last;
 }
 
 // ---------------------------------------------------------------------------
@@ -463,7 +503,8 @@ async function runReasoningChecks(
   const captures: ProtocolCapture[] = [];
   let correct = 0;
   const details: string[] = [];
-  const perQuestion: { id: string; ok: boolean; expected: string }[] = [];
+  const judged: { id: string; ok: boolean; expected: string }[] = [];
+  const transient: { id: string; code: string }[] = [];
   for (const q of questions) {
     if (Date.now() - startedAt > timeBudgetMs) {
       details.push('时间预算不足，剩余题目跳过');
@@ -474,28 +515,36 @@ async function runReasoningChecks(
       messages: [{ role: 'user', content: q.prompt }],
       maxTokens: 512,
     };
-    const { capture, result } = await doStreamCapture(target, { ...opts, timeoutMs: Math.min(opts?.timeoutMs ?? 30_000, 45_000) }, payload);
+    const { capture, result } = await doStreamCaptureWithRetry(target, { ...opts, timeoutMs: Math.min(opts?.timeoutMs ?? 30_000, 45_000) }, payload);
     captures.push(capture);
     if (result.success) {
       const ok = judgeQuestion(q, capture.text);
       if (ok) correct += 1;
-      perQuestion.push({ id: q.id, ok, expected: q.expected });
+      judged.push({ id: q.id, ok, expected: q.expected });
+    } else if (isTransientErrorCode(result.errorCode)) {
+      // 临时错误（重试后仍 429/5xx/超时）：该题不参与计分（不是答错）
+      transient.push({ id: q.id, code: result.errorCode ?? 'unknown' });
     } else {
-      perQuestion.push({ id: q.id, ok: false, expected: q.expected });
+      judged.push({ id: q.id, ok: false, expected: q.expected });
       details.push(`题目 ${q.id} 请求失败: ${result.errorCode ?? 'unknown'}`);
     }
   }
-  const total = perQuestion.length;
+  // 只用「拿到有效响应」的题计分；全部临时失败 → null（不执行）
+  const total = judged.length;
   const ratio = total > 0 ? correct / total : 0;
   const isFlagship = hint?.tier === 'flagship';
-  const passed = total === 3 && (isFlagship ? correct === 3 : correct >= 2);
-  const detail = `答对 ${correct}/${total}${isFlagship ? '（flagship 要求全对）' : '（要求 ≥2/3）'}${details.length > 0 ? '；' + details.join('；') : ''}`;
+  const required = isFlagship ? total : Math.max(2, Math.ceil(total * 2 / 3));
+  const passed = total >= 2 && correct >= Math.min(required, total);
+  const transientNote = transient.length > 0
+    ? `；${transient.length} 题因上游临时错误（${transient.map((t) => t.code).join('/')}）未计分`
+    : '';
+  const detail = `答对 ${correct}/${total}${isFlagship ? '（flagship 要求全对）' : '（要求 ≥2/3）'}${transientNote}${details.length > 0 ? '；' + details.join('；') : ''}`;
   return {
     check: makeCheck('reasoning', {
-      passed: total > 0 ? passed : null,
-      score: ratio,
+      passed: total >= 2 ? passed : null,
+      score: total >= 2 ? ratio : undefined,
       detail,
-      evidence: { questions: perQuestion },
+      evidence: { questions: judged, transientSkipped: transient },
     }),
     captures,
   };
@@ -539,6 +588,24 @@ function capabilityPayload(target: ProbeTarget, protocol: ChannelProtocol): Stre
   return { ...base, extra: { tools: [weatherTool], tool_choice: 'auto' } };
 }
 
+/** connectivity 检查结果构造：成功 / 临时错误（null 不计分）/ 真实连通失败 */
+function buildConnectivityOutcome(
+  bench: { result: ProbeResult },
+  transientFail: boolean,
+  apiKey: string,
+): CheckOutcome {
+  if (bench.result.success) {
+    return { passed: true, detail: `连通正常（HTTP ${bench.result.httpStatus}，延迟 ${bench.result.latencyMs ?? '?'}ms）` };
+  }
+  if (transientFail) {
+    return { passed: null, detail: `上游临时错误（${bench.result.errorCode}），重试 ${RETRY_MAX} 次后仍失败，本项未计分` };
+  }
+  return {
+    passed: false,
+    detail: `连通失败（${bench.result.errorCode ?? 'unknown'}：${redactWithKey(bench.result.errorMessage, apiKey) ?? ''}）`,
+  };
+}
+
 export async function probeAuthenticity(
   target: ProbeTarget,
   hint: CatalogHint | null,
@@ -559,18 +626,40 @@ export async function probeAuthenticity(
     ],
     maxTokens: 300,
   };
-  const bench = await doStreamCapture(target, opts, benchPayload);
+  const bench = await doStreamCaptureWithRetry(target, opts, benchPayload);
   captures.push(bench.capture);
 
-  // connectivity（10）
-  checks.push(makeCheck('connectivity', {
-    passed: bench.result.success,
-    detail: bench.result.success
-      ? `连通正常（HTTP ${bench.result.httpStatus}，延迟 ${bench.result.latencyMs ?? '?'}ms）`
-      : `连通失败（${bench.result.errorCode ?? 'unknown'}：${redactWithKey(bench.result.errorMessage, target.apiKey) ?? ''}）`,
-  }));
+  // connectivity（10）：临时错误（重试后仍 429/5xx/超时）→ null 不计分，
+  // 不再把被限流的正规渠道冤枉成连通失败
+  const benchTransientFail = !bench.result.success && isTransientErrorCode(bench.result.errorCode);
+  const connectivityOutcome = buildConnectivityOutcome(bench, benchTransientFail, target.apiKey);
+  checks.push(makeCheck('connectivity', connectivityOutcome));
+  if (benchTransientFail) {
+    // 基准请求是后续检查的数据源：临时错误时后续检查全部未执行 → 权重不足判 unknown
+    const score = null;
+    const executedWeight = 10; // 只有 connectivity 权重 10，但 passed=null 不计入
+    const earlyChecks: AuthenticityCheck[] = checks;
+    for (const id of ['model_echo', 'response_shape', 'token_count', 'knowledge', 'reasoning', 'capability', 'speed'] as AuthenticityCheckId[]) {
+      const meta = AUTH_CHECKS.find((c) => c.id === id);
+      earlyChecks.push({
+        id,
+        name: meta?.name ?? id,
+        passed: null,
+        weight: meta?.weight ?? 0,
+        detail: '基准请求因上游临时错误未获得有效响应，本项未计分',
+      });
+    }
+    return {
+      model: target.model,
+      protocol: target.protocol,
+      score,
+      verdict: verdictFromScore(score, executedWeight),
+      checks: earlyChecks,
+      durationMs: Date.now() - startedAll,
+    };
+  }
   if (!bench.result.success) {
-    // 连通性失败 → 其余检查不执行
+    // 真实连通性失败（401/403/404 等）→ 其余检查不执行
     const score = 0;
     return {
       model: target.model,
@@ -607,7 +696,7 @@ export async function probeAuthenticity(
     ],
     maxTokens: 512,
   };
-  const bench2 = await doStreamCapture(target, opts, bench2Payload);
+  const bench2 = await doStreamCaptureWithRetry(target, opts, bench2Payload);
   captures.push(bench2.capture);
   const bench2xPayload: StreamRequestPayload = {
     model: target.model,
@@ -617,12 +706,17 @@ export async function probeAuthenticity(
     ],
     maxTokens: 512,
   };
-  const bench2x = await doStreamCapture(target, opts, bench2xPayload);
+  const bench2x = await doStreamCaptureWithRetry(target, opts, bench2xPayload);
   captures.push(bench2x.capture);
+  const tokenTransient = (!bench2.result.success && isTransientErrorCode(bench2.result.errorCode))
+    || (!bench2x.result.success && isTransientErrorCode(bench2x.result.errorCode));
   const tokenCheckDiff = checkTokenCountDiff(vendorSlug, bench2.capture.inputTokens, bench2x.capture.inputTokens);
+  const tokenTransientCode = !bench2.result.success ? bench2.result.errorCode : bench2x.result.errorCode;
   checks.push(makeCheck('token_count', {
-    passed: tokenCheckDiff.passed,
-    detail: buildTokenCountDiffDetail(tokenCheckDiff, bench2.capture.inputTokens, bench2x.capture.inputTokens),
+    passed: tokenTransient ? null : tokenCheckDiff.passed,
+    detail: tokenTransient
+      ? `上游临时错误（${tokenTransientCode}），重试 ${RETRY_MAX} 次后仍失败，本项未计分`
+      : buildTokenCountDiffDetail(tokenCheckDiff, bench2.capture.inputTokens, bench2x.capture.inputTokens),
     evidence: {
       usage1x: bench2.capture.inputTokens,
       usage2x: bench2x.capture.inputTokens,
@@ -646,9 +740,16 @@ export async function probeAuthenticity(
     checks.push(makeCheck('capability', { passed: null, detail: '快速模式跳过 capability 检查' }));
   } else {
     const capPayload = capabilityPayload(target, target.protocol);
-    const cap = await doStreamCapture(target, { ...opts, timeoutMs: Math.min(opts?.timeoutMs ?? 30_000, 45_000) }, capPayload);
+    const cap = await doStreamCaptureWithRetry(target, { ...opts, timeoutMs: Math.min(opts?.timeoutMs ?? 30_000, 45_000) }, capPayload);
     captures.push(cap.capture);
-    checks.push(makeCheck('capability', checkCapability(target.protocol, cap.capture)));
+    if (!cap.result.success && isTransientErrorCode(cap.result.errorCode)) {
+      checks.push(makeCheck('capability', {
+        passed: null,
+        detail: `上游临时错误（${cap.result.errorCode}），重试 ${RETRY_MAX} 次后仍失败，本项未计分`,
+      }));
+    } else {
+      checks.push(makeCheck('capability', checkCapability(target.protocol, cap.capture)));
+    }
   }
 
   // speed（5）：基于基准请求
@@ -667,7 +768,7 @@ export async function probeAuthenticity(
       passedWeight += c.weight;
     }
   }
-  const score = executedWeight > 0 ? Math.round((passedWeight / executedWeight) * 100) : 0;
+  const score = executedWeight > 0 ? Math.round((passedWeight / executedWeight) * 100) : null;
   const verdict: TrustVerdict = verdictFromScore(score, executedWeight);
 
   // P1 修复：报告出口按真实 apiKey 深度脱敏（check.detail / evidence 中

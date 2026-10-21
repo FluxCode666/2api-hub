@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { matchCatalogModelImpl, modelEchoMatches, normalizeModelName } from '../src/match.js';
-import { checkTokenCount, expectedTokenRange, O200K_BENCHMARK_TOKENS } from '../src/calibration.js';
+import { checkTokenCount, checkTokenCountDiff, expectedPureTokens, expectedTokenRange, O200K_BENCHMARK_TOKENS } from '../src/calibration.js';
 import { AUTH_CHECKS, verdictFromScore } from '@hub/shared';
 
 const catalog = [
@@ -116,6 +116,59 @@ describe('calibration', () => {
   it('无 usage 数据 → null', () => {
     expect(checkTokenCount('anthropic', 'anthropic', null).passed).toBeNull();
     expect(checkTokenCount('anthropic', 'anthropic', 0).passed).toBeNull();
+  });
+});
+
+describe('calibration 差分法（checkTokenCountDiff）', () => {
+  it('纯文本期望值：expectedPureTokens 不含协议开销', () => {
+    const r = expectedPureTokens('anthropic');
+    expect(r.expected).toBe(Math.round(O200K_BENCHMARK_TOKENS * 1.2));
+    // 区间 ±8%
+    expect(r.range[0]).toBe(Math.floor(r.expected * 0.92));
+    expect(r.range[1]).toBe(Math.ceil(r.expected * 1.08));
+  });
+
+  it('真实 Anthropic 差分（1×=178, 2×=348 → diff=170）→ 判 true', () => {
+    // mock 实测值：usage1=186（含系统提示），usage2=356 → diff=170
+    const r = checkTokenCountDiff('anthropic', 186, 356);
+    expect(r.diff).toBe(170);
+    expect(r.passed).toBe(true);
+  });
+
+  it('换皮检测：声称 anthropic 实为 openai（diff=142）→ 判 false', () => {
+    // 实际后端按 o200k 计数：usage1=150, usage2=292 → diff=142
+    const r = checkTokenCountDiff('anthropic', 150, 292);
+    expect(r.diff).toBe(142);
+    // anthropic 纯文本期望 170 ±8% = [156, 184]，142 落在区间外
+    expect(r.passed).toBe(false);
+  });
+
+  it('差分法比单次法更严：deepseek 冒充 openai 也可检测', () => {
+    // 声称 openai（期望纯文本 142±8%=[130,154]），实为 deepseek（×1.1 → 156.2）
+    // 单次法 ±10% 下 1.09 比值不可检测；差分法 ±8% 下 156 > 154 可检测
+    const usage1 = Math.round(O200K_BENCHMARK_TOKENS * 1.1 + 8); // deepseek 后端
+    const usage2 = Math.round(O200K_BENCHMARK_TOKENS * 2.2 + 8);
+    const r = checkTokenCountDiff('openai', usage1, usage2);
+    expect(r.passed).toBe(false);
+  });
+
+  it('2× 计数不增长（伪造常量 usage）→ 判 false', () => {
+    const r = checkTokenCountDiff('anthropic', 150, 150);
+    expect(r.passed).toBe(false);
+  });
+
+  it('无 usage → null（不参与计分）', () => {
+    expect(checkTokenCountDiff('anthropic', null, 356).passed).toBeNull();
+    expect(checkTokenCountDiff('anthropic', 186, null).passed).toBeNull();
+    expect(checkTokenCountDiff('anthropic', 0, 356).passed).toBeNull();
+  });
+
+  it('诚实声明：openai/xai/bytedance 簇内不可区分（token_count 对此无效）', () => {
+    // 声称 xai 实为 openai：比值 1.00，任何容差都无法区分 → passed=true（不误报）
+    const usage1 = O200K_BENCHMARK_TOKENS + 8;
+    const usage2 = O200K_BENCHMARK_TOKENS * 2 + 8;
+    const r = checkTokenCountDiff('xai', usage1, usage2);
+    expect(r.passed).toBe(true); // 无法检测，但不给出错误的 fake 信号
   });
 });
 

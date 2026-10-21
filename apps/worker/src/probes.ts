@@ -11,7 +11,7 @@ import { insertNotification } from './notify';
 export interface ProbeJob {
   channelId: number;
   siteId: number;
-  ownerId: number | null; // 站点 owner（channel_invalid 通知对象）
+  ownerId: string | null; // 站点 owner uuid（channel_invalid 通知对象）
   channelName: string;
   baseUrl: string;
   apiKey: string;
@@ -91,11 +91,12 @@ export async function countLeadingFailures(db: Database, channelId: number): Pro
 /** 最近 20 条中、排除最新一条后的尾部连续失败数（恢复通知用） */
 async function leadingFailuresBeforeLatest(db: Database, channelId: number): Promise<number> {
   const rows = await db.execute<RecentRunRow>(sql`
-    SELECT success FROM (
-      SELECT success FROM probe_runs
+    WITH recent AS (
+      SELECT success, created_at FROM probe_runs
       WHERE channel_id = ${channelId} AND kind = 'availability'
       ORDER BY created_at DESC LIMIT 21
-    ) t ORDER BY created_at DESC
+    )
+    SELECT success FROM recent ORDER BY created_at DESC
   `);
   // rows[0] 是本次成功；从第二条开始数连续失败
   let cf = 0;

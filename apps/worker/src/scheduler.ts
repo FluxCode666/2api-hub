@@ -6,7 +6,9 @@
  *   limiter 满时进入持久 pending 队列，后续 tick 补位（领取时已推进 next_probe_at，不会被重复领取）
  */
 import { sql } from 'drizzle-orm';
+import { decryptSecret } from '@hub/db';
 import type { Database } from '@hub/db';
+import type { ChannelProtocol } from '@hub/shared';
 import type { ConcurrencyLimiter } from './limiter';
 import type { ProbeJob } from './probes';
 import { executeProbe } from './probes';
@@ -24,21 +26,20 @@ export interface SchedulerDeps {
 interface DueRow extends Record<string, unknown> {
   channel_id: number;
   site_id: number;
-  owner_id: number | null;
+  owner_id: string | null;
   channel_name: string;
   base_url: string;
-  api_key: string;
-  protocol: 'openai' | 'anthropic';
+  api_key_enc: string;
+  protocol: ChannelProtocol;
   model: string;
-  probe_enabled: boolean;
   interval_sec: number;
   recent_all_fail: boolean; // 最近 3 次全失败（实时降频判断）
 }
 
 const DUE_SQL = sql`
-  SELECT c.id AS channel_id, c.site_id, s.owner_id, c.name AS channel_name,
-    c.base_url, c.api_key, c.protocol, c.primary_model AS model,
-    c.probe_enabled, COALESCE(c.interval_sec, 600) AS interval_sec,
+  SELECT c.id AS channel_id, c.site_id, s.owner_id::text AS owner_id, c.name AS channel_name,
+    c.base_url, c.api_key_enc, c.protocol, c.primary_model AS model,
+    c.probe_interval_sec AS interval_sec,
     COALESCE((
       SELECT bool_and(NOT r.success) FROM (
         SELECT success FROM probe_runs
@@ -147,9 +148,10 @@ function toJob(r: DueRow): ProbeJob {
     ownerId: r.owner_id,
     channelName: r.channel_name,
     baseUrl: r.base_url,
-    apiKey: r.api_key,
-    // SAFETY: channels.protocol 列类型就是 enum('openai','anthropic')，与 ChannelProtocol 成员一致
-    protocol: r.protocol as ProbeJob['protocol'],
+    // api_key_enc 是 AES-256-GCM 密文，探测前解密
+    apiKey: decryptSecret(r.api_key_enc),
+    // SAFETY: channels.protocol 列是 channel_protocol 枚举，与 shared 的 ChannelProtocol 成员一致
+    protocol: r.protocol,
     model: r.model,
     timeoutMs: 30_000,
     trigger: 'schedule',

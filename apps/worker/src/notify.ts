@@ -15,7 +15,7 @@ export type NotifyType =
 /** 插入一条站内通知（幂等场景由调用方控制） */
 export async function insertNotification(
   db: Database,
-  userId: number,
+  userId: string,
   type: NotifyType,
   title: string,
   body: string,
