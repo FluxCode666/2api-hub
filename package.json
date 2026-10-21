@@ -1,0 +1,20 @@
+{
+  "name": "2api-hub",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.30.2",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev:web": "pnpm --filter @hub/web dev",
+    "dev:api": "pnpm --filter @hub/api dev",
+    "dev:worker": "pnpm --filter @hub/worker dev",
+    "dev:mock": "pnpm --filter @hub/mock-upstream dev",
+    "db:up": "docker compose up -d postgres",
+    "db:generate": "pnpm --filter @hub/db generate",
+    "db:migrate": "pnpm --filter @hub/db migrate",
+    "db:seed": "pnpm --filter @hub/db seed",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "build": "pnpm -r build"
+  }
+}
