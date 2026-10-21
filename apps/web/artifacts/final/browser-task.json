@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-10-21T19:09:07.536Z",
+  "taskId": 60,
+  "status": "done",
+  "reportCheckCount": 8,
+  "automaticReportRefresh": true,
+  "uiMessage": "模型检测已完成，报告与可信分已更新。",
+  "errors": [],
+  "createdAt": "2026-10-21T18:57:15.022Z",
+  "finishedAt": "2026-10-21T18:57:17.641Z"
+}

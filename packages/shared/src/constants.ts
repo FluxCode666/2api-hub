@@ -87,6 +87,10 @@ export function priceCny(officialUsdPerM: number | null | undefined, ratio: numb
 // ---------- scoring (SPEC §5.5) ----------
 export const DEFAULT_SCORING_WEIGHTS: ScoringWeights = { uptime: 0.45, latency: 0.2, trust: 0.25, stability: 0.1 };
 export const MIN_SAMPLES_FOR_SCORE = 6;
+/** 可用率得分 = uptime24h ^ 8 × 100 */
+export const UPTIME_SCORE_EXPONENT = 8;
+/** 可信分 < 50（判为假模型）时推荐分上限 */
+export const FAKE_SCORE_CAP = 40;
 
 export function computeRecommendScore(input: {
   uptime24h: number | null;
@@ -98,12 +102,15 @@ export function computeRecommendScore(input: {
 }): number | null {
   if (input.samples24h < MIN_SAMPLES_FOR_SCORE || input.uptime24h === null) return null;
   const w = input.weights ?? DEFAULT_SCORING_WEIGHTS;
-  const uptimePart = input.uptime24h * 100;
+  // 可用率非线性计分：99% → 92、95% → 66、90% → 43、70% → 6，让不稳定渠道明显靠后
+  const uptimePart = Math.pow(input.uptime24h, UPTIME_SCORE_EXPONENT) * 100;
   const latencyPart = input.latencyP50 === null ? 0 : clamp(100 - (input.latencyP50 - 1500) / 150, 0, 100);
   const trustPart = input.trustScore ?? 60;
   const stablePart = 100 - Math.min(input.consecutiveFailures * 20, 100);
   const total = w.uptime + w.latency + w.trust + w.stability;
-  const score = (uptimePart * w.uptime + latencyPart * w.latency + trustPart * w.trust + stablePart * w.stability) / total;
+  let score = (uptimePart * w.uptime + latencyPart * w.latency + trustPart * w.trust + stablePart * w.stability) / total;
+  // 判为假模型的渠道推荐分封顶，避免"稳定但掺假"的渠道排在真模型前面
+  if (input.trustScore !== null && input.trustScore < 50) score = Math.min(score, FAKE_SCORE_CAP);
   return Math.round(score * 10) / 10;
 }
 

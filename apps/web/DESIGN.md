@@ -26,7 +26,7 @@ gpt-taste 模拟 Python seed=2210：Cinematic Center Hero；Geist 字体；Infin
 - `@/components/dashboard-shell`: `DashboardShell({kind:'merchant'|'admin',user:SessionUser,children:ReactNode})`。
 
 ## 版式与动效
-品牌页面按 AIDA：导航、宽幅 2–3 行 Hero（max-w-6xl）、密铺四块 bento（12列，7+5 / 5+7）、检测方法滚动叙事、CTA、页脚。每块可点击卡片都有轻微位移/内部放大反馈，按钮有边色和 y 位移反馈。GSAP 在 prefers-reduced-motion 下禁用；pin 仅桌面。
+品牌页面按 AIDA：导航、宽幅 2–3 行 Hero（max-w-6xl）、密铺四块 bento（12列，7+5 / 5+7）、检测方法滚动叙事、CTA、页脚。每块可点击卡片都有轻微位移/内部放大反馈，按钮有边色和 y 位移反馈。Hero 在 SSR 时即完整可见，入场仅做 8px 位移，首页五组元素总时长 0.61 秒；不设置初始透明。GSAP 与 CSS 动画在 prefers-reduced-motion 下禁用；pin 仅桌面。
 数据页面优先扫读：表头小号、数字右对齐、单位始终可见；60格状态条缺样本显示未知，不以成功补齐。移动端榜单用卡片，后台侧栏变横向导航。
 
 ## 目录所有权

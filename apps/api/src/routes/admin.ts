@@ -286,13 +286,7 @@ export async function adminRoutes(app: FastifyInstance) {
       ...(input.paymentMethods !== undefined ? { paymentMethods: input.paymentMethods } : {}),
       updatedAt: new Date(),
     }).where(eq(sites.id, id));
-    // 充值倍率变化影响所有渠道实际倍率 → 原子入队发现任务刷新（复用已有活动任务）
-    if (input.rechargeRatio !== undefined && input.rechargeRatio !== s.rechargeRatio) {
-      const chs = await db.select({ id: channels.id }).from(channels).where(eq(channels.siteId, id));
-      for (const c of chs) {
-        await enqueueProbeTask(db, { channelId: c.id, kind: 'discovery', trigger: 'admin', requestedBy: admin.id });
-      }
-    }
+    // 倍率变化不触发任何任务（SPEC §4.1.6：只有连接相关字段才排检测）
     await audit(db, admin, 'site.update', 'site', id, { fields: Object.keys(input) }, req.ip);
     return { ok: true };
   });
@@ -338,7 +332,6 @@ export async function adminRoutes(app: FastifyInstance) {
       || (input.baseUrl !== undefined && input.baseUrl.replace(/\/$/, '') !== c.baseUrl)
       || (input.protocol !== undefined && input.protocol !== c.protocol)
       || (input.primaryModel !== undefined && input.primaryModel !== c.primaryModel);
-    const ratioChanged = input.groupRatio !== undefined && input.groupRatio !== c.groupRatio;
 
     const { encryptSecret, maskSecret } = await import('@hub/db');
     await db.update(channels).set({
@@ -359,11 +352,9 @@ export async function adminRoutes(app: FastifyInstance) {
       ...(connectionChanged ? { lastTestOk: null, lastTestAt: null } : {}),
       updatedAt: new Date(),
     }).where(eq(channels.id, id));
-    // 关键字段变化 → 排队检测任务
-    if (connectionChanged || ratioChanged) {
-      await db.insert(probeTasks).values({
-        channelId: c.id, kind: 'authenticity', trigger: 'admin', payload: {}, requestedBy: admin.id,
-      });
+    // 连接相关字段变化 → 原子入队检测任务（倍率变化不触发）
+    if (connectionChanged) {
+      await enqueueProbeTask(db, { channelId: c.id, kind: 'authenticity', trigger: 'admin', requestedBy: admin.id });
     }
     await audit(db, admin, 'channel.update', 'channel', id, { fields: Object.keys(input).filter((k) => k !== 'apiKey') }, req.ip);
     return { ok: true };

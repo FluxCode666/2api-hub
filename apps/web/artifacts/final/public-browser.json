@@ -1,0 +1,54 @@
+[
+  {
+    "path": "/",
+    "width": 1440,
+    "documentWidth": 1440,
+    "activity": [
+      "OpenGate / GPT-6 Astra 官转连接正常24h 可用率 100.00% 10/22 02:56",
+      "OpenGate / Claude Code 专线连接正常24h 可用率 100.00% 10/22 02:56",
+      "蜜桃API / GPT 低价连接正常24h 可用率 98.55% 10/22 02:56"
+    ],
+    "topRows": [],
+    "errors": []
+  },
+  {
+    "path": "/rankings",
+    "width": 1440,
+    "documentWidth": 1440,
+    "visibleRows": 7,
+    "errors": []
+  },
+  {
+    "path": "/sites",
+    "width": 1440,
+    "documentWidth": 1440,
+    "found": true,
+    "errors": []
+  },
+  {
+    "path": "/",
+    "width": 390,
+    "documentWidth": 390,
+    "activity": [
+      "OpenGate / GPT-6 Astra 官转连接正常24h 可用率 100.00% 10/22 02:56",
+      "OpenGate / Claude Code 专线连接正常24h 可用率 100.00% 10/22 02:56",
+      "蜜桃API / GPT 低价连接正常24h 可用率 98.55% 10/22 02:56"
+    ],
+    "topRows": [],
+    "errors": []
+  },
+  {
+    "path": "/rankings",
+    "width": 390,
+    "documentWidth": 390,
+    "visibleRows": 20,
+    "errors": []
+  },
+  {
+    "path": "/sites",
+    "width": 390,
+    "documentWidth": 390,
+    "found": true,
+    "errors": []
+  }
+]

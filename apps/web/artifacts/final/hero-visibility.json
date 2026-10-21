@@ -1,0 +1,120 @@
+{
+  "checkedAt": "2026-10-21T19:07:03.987Z",
+  "maxAnimationSeconds": 0.61,
+  "checks": [
+    {
+      "viewport": "desktop",
+      "early": {
+        "ms": 257.30000001192093,
+        "hero": [
+          {
+            "tag": "DIV",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 5.6187)"
+          },
+          {
+            "tag": "H1",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 7.4784)"
+          },
+          {
+            "tag": "P",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 8)"
+          },
+          {
+            "tag": "DIV",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 8)"
+          },
+          {
+            "tag": "FORM",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 8)"
+          }
+        ],
+        "overflow": false,
+        "errors": []
+      },
+      "capturedAt": 373.09999999403954,
+      "settled": {
+        "ms": 907,
+        "heroOpacity": [
+          "1",
+          "1",
+          "1",
+          "1",
+          "1"
+        ]
+      },
+      "ranking": {
+        "headingY": 104.671875,
+        "model": "Fable 5.1",
+        "channelIds": [
+          10,
+          30,
+          13
+        ],
+        "errors": [],
+        "overflow": false
+      }
+    },
+    {
+      "viewport": "mobile",
+      "early": {
+        "ms": 256.7999999821186,
+        "hero": [
+          {
+            "tag": "DIV",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 4.4469)"
+          },
+          {
+            "tag": "H1",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 6.0507)"
+          },
+          {
+            "tag": "P",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 8)"
+          },
+          {
+            "tag": "DIV",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 8)"
+          },
+          {
+            "tag": "FORM",
+            "opacity": "1",
+            "transform": "matrix(1, 0, 0, 1, 0, 8)"
+          }
+        ],
+        "overflow": false,
+        "errors": []
+      },
+      "capturedAt": 359.59999999403954,
+      "settled": {
+        "ms": 876.1999999880791,
+        "heroOpacity": [
+          "1",
+          "1",
+          "1",
+          "1",
+          "1"
+        ]
+      },
+      "ranking": {
+        "headingY": 105.03125,
+        "model": "Fable 5.1",
+        "channelIds": [
+          10,
+          30,
+          13
+        ],
+        "errors": [],
+        "overflow": false
+      }
+    }
+  ]
+}

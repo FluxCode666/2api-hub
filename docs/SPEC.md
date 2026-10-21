@@ -83,7 +83,7 @@ pnpm monorepo，Node 22，TypeScript strict，全部 ESM。包作用域 `@hub/*`
 3. 对每个渠道点击「测试连接」→ API 同步调用 `@hub/probe` 做一次可用性探测（≤30s），结果写入 `probe_runs`（trigger=`merchant`）并返回；可点击「获取模型列表」→ 调用上游 `/v1/models` 回填 `channel_models`。
 4. 至少一个渠道连接测试通过后，可「提交审核」→ `site.status=pending`，同时 API 为该站点所有渠道创建 `probe_tasks(kind=authenticity, trigger=onboarding)`，worker 执行完整模型检测。
 5. 管理员在 `/admin/reviews` 查看站点信息、渠道连接结果、检测报告 → 通过（`approved`，站点公开，渠道开始定时探测并进入榜单）或驳回（`rejected` + 原因，站长修改后可再次提交）。
-6. 已上线站点修改关键字段（base_url / API Key / 倍率）**不需要**重新审核，但会立即触发一次检测任务；管理员可随时 `suspended`。
+6. 已上线站点修改连接相关字段（base_url / API Key / protocol / 主测模型）**不需要**重新审核，但会立即排队一次真伪检测（`kind=authenticity`，同渠道已有排队任务时复用）；修改倍率（分组倍率 / 充值倍率）只影响价格计算，**不触发**任何检测任务。管理员可随时 `suspended`。
 
 ### 4.2 稳定性探测（定时）
 
@@ -188,10 +188,11 @@ export function assertSafeUrl(url: string, allowPrivate?: boolean): Promise<void
 - `trust_score`：主测模型最近一次真伪检测得分（无则 null）
 - `recommend_score`（0–100，样本 < 6 时为 null）：
   ```
-  uptime_part  = uptime_24h * 100                                   权重 0.45
+  uptime_part  = uptime_24h ^ 8 * 100                               权重 0.45   （非线性：99%→92、95%→66、90%→43、70%→6）
   latency_part = clamp(100 - (latency_p50_24h - 1500) / 150, 0, 100) 权重 0.20   （≤1.5s 满分，16.5s 为 0）
   trust_part   = trust_score ?? 60                                   权重 0.25
   stable_part  = 100 - min(consecutive_failures * 20, 100)            权重 0.10
+  若 trust_score < 50（判为假模型），推荐分封顶 40
   ```
   权重存放于 `settings` 表 `scoring.weights`，可在管理后台调整。价格**不计入**推荐分（价格单独排序）。
 

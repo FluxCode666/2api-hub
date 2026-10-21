@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-10-21T18:55:06.794Z",
+  "genuine": {
+    "score": 100,
+    "verdict": "genuine",
+    "checkCount": 8,
+    "keyEmpty": true,
+    "errors": []
+  },
+  "fake": {
+    "score": "31/100",
+    "verdict": "31 · 疑似假模型",
+    "checkCount": 8,
+    "keyEmpty": true,
+    "errors": []
+  }
+}

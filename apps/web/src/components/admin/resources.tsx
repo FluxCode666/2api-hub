@@ -28,7 +28,7 @@ function ChannelEditor({ item }: { item: MerchantChannel }) {
       const key = String(form.get('apiKey') ?? '');
       const body: Partial<ChannelInput & Pick<MerchantChannel, 'status' | 'probeEnabled' | 'probeIntervalSec'>> = { name: String(form.get('name')), baseUrl: String(form.get('baseUrl')), groupRatio: Number(form.get('groupRatio')), primaryModel: String(form.get('primaryModel')), backupModel: String(form.get('backupModel') ?? '').trim() || null, rpmLimit: form.get('rpmLimit') ? Number(form.get('rpmLimit')) : null, protocol: String(form.get('protocol')) as ChannelProtocol, billingType: String(form.get('billingType')) as BillingType, status: String(form.get('status')) as ChannelStatus, probeEnabled: form.get('probeEnabled') === 'on', probeIntervalSec: Number(form.get('probeIntervalSec')), ...(key ? { apiKey: key } : {}) };
       await api<unknown>(`/admin/channels/${item.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-      setMessage('渠道已保存；关键字段变更将重新检测。'); router.refresh();
+      setMessage('渠道已保存。仅接口地址、API Key、协议或主测模型变化会重新检测；倍率修改只更新价格。'); router.refresh();
     } catch (error) { setMessage(error instanceof Error ? error.message : '保存失败'); } finally { setPending(false); }
   }
   return <details><summary className="btn btn-small">编辑</summary><form action={save} className="stack panel" style={{ minWidth: 280, marginTop: 12 }}>
@@ -44,6 +44,7 @@ function ChannelEditor({ item }: { item: MerchantChannel }) {
     <label className="field">探测间隔（秒）<input className="input mono" name="probeIntervalSec" type="number" min="30" max="86400" required defaultValue={item.probeIntervalSec} /></label>
     <label className="field">状态<select className="select" name="status" defaultValue={item.status}><option value="active">活跃</option><option value="paused">暂停</option><option value="invalid">失效</option></select></label>
     <label className="row"><input type="checkbox" name="probeEnabled" defaultChecked={item.probeEnabled} />启用定时探测</label>
+    <p className="muted" style={{fontSize:12}}>修改接口地址、API Key、协议或主测模型后会重新检测；倍率和资料修改不触发检测。</p>
     <button className="btn btn-primary" disabled={pending}>{pending ? '保存中…' : '保存渠道'}</button>{message && <p role="status" className="muted">{message}</p>}
   </form></details>;
 }

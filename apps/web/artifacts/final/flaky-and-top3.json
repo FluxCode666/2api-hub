@@ -1,0 +1,92 @@
+[
+  {
+    "width": 1440,
+    "top3": [
+      {
+        "channel": "/channels/13",
+        "text": "01疾疾风APIClaude 低价 · 4 个模型A0.70×¥21 / ¥105claude-fable-5-199.27%137 次1.68 s741 ms100 · 真模型99.410/22 02:56去站点"
+      },
+      {
+        "channel": "/channels/4",
+        "text": "02蜜蜜桃APIClaude 镜像 · 2 个模型A0.60×¥18 / ¥90claude-fable-5-199.27%137 次389 ms174 ms98 · 真模型99.210/22 02:46去站点"
+      },
+      {
+        "channel": "/channels/10",
+        "text": "03OOpenGateClaude Code 专线 · 2 个模型A1.00×¥30 / ¥150claude-fable-5-1100.00%138 次1.75 s757 ms97 · 真模型98.910/22 02:56去站点"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/channels/24",
+    "width": 1440,
+    "documentWidth": 1440,
+    "statusbar": {
+      "ok": 39,
+      "fail": 21,
+      "unknown": 0
+    },
+    "errorLabels": [
+      "正常响应",
+      "上游服务异常",
+      "上游服务异常",
+      "正常响应",
+      "上游服务异常",
+      "正常响应",
+      "正常响应",
+      "上游服务异常",
+      "正常响应",
+      "上游服务异常"
+    ],
+    "errors": []
+  },
+  {
+    "width": 390,
+    "top3": [
+      {
+        "channel": "/channels/13",
+        "text": "01疾疾风APIClaude 低价 · 4 个模型A0.70×¥21 / ¥105claude-fable-5-199.27%137 次1.68 s741 ms100 · 真模型99.410/22 02:56去站点"
+      },
+      {
+        "channel": "/channels/4",
+        "text": "02蜜蜜桃APIClaude 镜像 · 2 个模型A0.60×¥18 / ¥90claude-fable-5-199.27%137 次389 ms174 ms98 · 真模型99.210/22 02:46去站点"
+      },
+      {
+        "channel": "/channels/10",
+        "text": "03OOpenGateClaude Code 专线 · 2 个模型A1.00×¥30 / ¥150claude-fable-5-1100.00%138 次1.75 s757 ms97 · 真模型98.910/22 02:56去站点"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/channels/24",
+    "width": 390,
+    "documentWidth": 390,
+    "statusbar": {
+      "ok": 39,
+      "fail": 21,
+      "unknown": 0
+    },
+    "errorLabels": [
+      "正常响应",
+      "上游服务异常",
+      "上游服务异常",
+      "正常响应",
+      "上游服务异常",
+      "正常响应",
+      "正常响应",
+      "上游服务异常",
+      "正常响应",
+      "上游服务异常"
+    ],
+    "errors": []
+  },
+  {
+    "homeModel": "claude-fable-5-1",
+    "expectedChannelIds": [
+      13,
+      4,
+      10
+    ]
+  }
+]

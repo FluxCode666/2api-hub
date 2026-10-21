@@ -72,8 +72,8 @@ export async function channelRoutes(app: FastifyInstance) {
     const { c, s } = row;
 
     const user = await app.optionalUser(req);
-    // 直接按 id 查询榜单行（不依赖站点前 N 名列表，超过 N 个渠道时也能返回）
-    const { items } = await queryChannels(db, { ids: [id], page: 1, pageSize: 1 }, user?.id);
+    // 直接按 id 查询（approved 站点下 invalid/paused 渠道也返回详情）
+    const { items } = await queryChannels(db, { ids: [id], page: 1, pageSize: 1, includeInactive: true }, user?.id);
     const listItem = items[0];
     if (!listItem) throw notFound('渠道不存在或已下线');
 

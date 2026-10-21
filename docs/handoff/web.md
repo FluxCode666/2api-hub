@@ -2,7 +2,7 @@
 
 ## 状态
 
-公开站、站长工作台和管理后台已实现。Mock 验收已完成，Web 默认连接真实 API；真实模式 39 个页面和 3 项游客跳转均通过。真实连接测试、模型发现、提交审核和公开鉴定已通过；检测任务终态与审核后统计仍等待 worker，不能将 Mock 结果视为真实任务验收。
+公开站、站长工作台和管理后台已实现。Mock 验收已完成，Web 默认连接真实 API；真实模式 39 个页面和 3 项游客跳转均通过。真实连接测试、模型发现、提交审核、任务终态、管理审核上线、定时探测与公开鉴定均已通过。最终真实截图与结构化证据在 `apps/web/artifacts/final/`。
 
 ## 运行
 
@@ -54,7 +54,7 @@ PORT=3210 HOSTNAME=0.0.0.0 API_INTERNAL_URL=http://127.0.0.1:8711 node apps/web/
 
 ## 设计摘要
 
-完整规范见 `apps/web/DESIGN.md`。Geist 配合中文系统字体回退、墨绿底色和薄荷绿强调；亮色主题采用深绿强调色确保文字对比度。品牌页面使用宽幅两至三行 Hero、AIDA、密铺 Bento、GSAP ScrollTrigger、滚动文本与悬停反馈；尊重减少动态效果偏好。
+完整规范见 `apps/web/DESIGN.md`。Geist 配合中文系统字体回退、墨绿底色和薄荷绿强调；亮色主题采用深绿强调色确保文字对比度。品牌页面使用宽幅两至三行 Hero、AIDA、密铺 Bento、GSAP ScrollTrigger、滚动文本与悬停反馈。Hero 在 SSR 时即完整可见，五组元素仅做 8px 位移、总时长 0.61 秒；减少动态效果时关闭 GSAP、CSS 动画与平滑滚动。
 
 数据页优先扫读，数字等宽、状态语义统一。榜单筛选压缩为两行，次级条件折叠；输入防抖 300ms，其余条件即时生效。1440×900 实测表格从约 335px 开始，首屏完整显示 7 行；表头滚动后保持在导航下方 81px。390px 改为渠道卡片。
 
@@ -62,7 +62,7 @@ PORT=3210 HOSTNAME=0.0.0.0 API_INTERNAL_URL=http://127.0.0.1:8711 node apps/web/
 
 - 所有公开页面提供独立 `generateMetadata`、description、canonical、简体中文 Open Graph 与 Twitter 大图信息。模型摘要包含最低输入价、渠道数和最佳可用率；站点与渠道摘要包含真实价格/倍率、渠道与模型数量、可用率和用户评价。无样本明确显示待采样，不将空数据当作 0%。
 - 部署时设置 `HUB_SITE_URL`（或 `NEXT_PUBLIC_SITE_URL`）为真实公开域名；默认 `https://2api.hub`。canonical 和 sitemap 使用统一 origin，并移除筛选查询，避免重复收录。
-- `/sitemap.xml` 通过公开 API 分页收集所有模型、厂商、已上线站点与渠道。当前种子数据共 79 个唯一 URL；不包含私有页面、登录注册和临时对比。`/robots.txt` 禁止 `/merchant`、`/admin`、`/me`、`/api`、登录注册与跳转路径；认证页和个人中心额外带 noindex。
+- `/sitemap.xml` 通过公开 API 分页收集所有模型、厂商、已上线站点与渠道。仅收录 active 渠道；不包含私有页面、登录注册、临时对比和失效/暂停渠道。`/robots.txt` 禁止 `/merchant`、`/admin`、`/me`、`/api`、登录注册与跳转路径；认证页和个人中心额外带 noindex。
 - JSON-LD：首页 `WebSite + SearchAction`；模型页对应当前榜单的 `ItemList`；站点页 `Organization`，有有效评价时才附加 `AggregateRating`；指南页 `FAQPage` 与可见问答使用同一份内容。JSON 序列化转义 `<`，防止内容中断 script。
 - 分享图固定路径：`/opengraph-image`、`/models/[slug]/opengraph-image`、`/sites/[slug]/opengraph-image`。三个路由均使用 `ImageResponse` 生成 1200×630 PNG，沿用暗墨绿/薄荷绿设计。本地 Geist 与 Noto Sans SC 字体和许可证位于 `apps/web/public/fonts/og/`，生成过程不依赖外网字体；未知详情回退品牌图。
 - 公共数据使用不读取 Cookie 的 `publicApi`，榜单与探测数据 60 秒、目录 300 秒；首页 ISR 60 秒，厂商目录和鉴定页 300 秒，站点/渠道详情按需静态生成并以 60 秒刷新。带 URL 筛选的页面保留动态渲染，同时复用 Data Cache。私有 `serverApi` 强制 no-store。
@@ -72,7 +72,7 @@ PORT=3210 HOSTNAME=0.0.0.0 API_INTERNAL_URL=http://127.0.0.1:8711 node apps/web/
 
 ## 已做验证
 
-- TypeScript strict 类型检查与 `HUB_MOCK=0` 生产构建通过。
+- 最终源码的 `pnpm --filter @hub/web typecheck` 与 `HUB_MOCK=0 pnpm --filter @hub/web build` 均通过，保留 standalone 与 ISR；构建输出见 `artifacts/final/build.log`。构建后已恢复 3210 的真实模式开发服务。
 - Standalone/Docker 调整后，Mock 与真实开发服务的 42 项路由检查再次全部通过；Mock 和真实 `/go/1` 均返回 302。验收容器已停止，3210 已恢复 `HUB_MOCK=0` 的开发服务。
 - Mock 下 39 个公开、站长与管理路由返回 200，另 3 项游客重定向检查通过，无页面运行错误，结果保存在 `apps/web/artifacts/mock-route-checks.json`；游客重定向及用户 403、API 的 401/403 正常。
 - Mock 全链路：草稿 → 添加渠道 → 连接失败/成功 → 发现模型 → 0 元覆盖价 → 排队检测/任务完成 → 提交审核 → 管理通过 → 公开展示 → 暂停/恢复；评价隐藏、用户禁用、脱敏与越权拒绝也已验证。
@@ -98,7 +98,7 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 | 渠道关键连接配置修改后沿用 lastTestOk | 无效新配置仍可使用旧成功记录提交 | 后端已修；真实成功连接后改 Key 清空状态、未重测提交 400、重测恢复提交均通过 |
 | PUT 模型全删重建 | 仅修改覆盖价也丢失已有检测元数据 | 后端改为 upsert；真实 ID、映射、覆盖价及非空检测历史/可信分保留均通过 |
 | 管理渠道/站点 PATCH 剥除若干可编辑字段 | UI 返回成功但连接配置、contact/slug 等未保存 | 后端已修，全部字段真实定向复测通过 |
-| 管理修改倍率未排检测任务 | 与规格要求的倍率修改触发重新检测不符 | 已通知后端 |
+| 倍率变化曾触发检测任务 | 倍率只影响价格，无需检测上游 | 最终规则已统一；分组/充值倍率的修改和恢复四次 PATCH 均无新任务，连接记录保留，见 final/ratio-tasks.json |
 | 允许四项评分权重全 0 | 推荐分计算可能出现 0 分母 | 后端已修，拒绝全零且保留原值的真实复测通过 |
 | 管理厂商仅返回公开摘要，缺官网/简介/排序 | 编辑时无法完整回显已有资料 | 编排者批准 AdminVendor；前端/Mock 已接入，真实完整回读、部分更新保留和显式 null 清空均通过 |
 | 原始 SQL 的 created_at 实际为字符串 | `/sites` 500 | 后端已修复并真实复测 200 |
@@ -106,11 +106,11 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 
 `GET /me/reviews` 与 `DELETE /me/reviews/:id` 已获批准，`MyReview` 已进入共享契约，前端与 Mock 均已接入；真实创建、同站更新、分页、越权拒绝、本人删除及重复删除 404 均已通过。测试收藏与评价已清理，因无删除用户接口保留一个无业务数据的测试账号。
 
-真实公开/用户接口最近完整检查为 25 通过、0 失败、0 跳过，包含 `stableOnly=false` 和实际公开鉴定。管理定向复测共 30 项通过、0 项失败、2 项待补测（倍率排队）。管理检查包含独立目录/公告 CRUD、用户角色/封禁恢复、反馈、评分保存恢复、审计与检测任务排队 202。测试权重已恢复；原独立草稿站点 #20 / 渠道 #40 等随后端集成测试的种子恢复清理。
+真实公开/用户接口最近完整检查为 25 通过、0 失败、0 跳过，包含 `stableOnly=false` 和实际公开鉴定。原管理定向复测 30 项通过、0 项失败；后续两项倍率规则也已通过，修改及恢复共四次 PATCH 均未新建任务。管理检查包含独立目录/公告 CRUD、用户角色/封禁恢复、反馈、评分保存恢复、审计与检测任务排队 202。测试权重已恢复；原独立草稿站点 #20 / 渠道 #40 等随后端集成测试的种子恢复清理。
 
-真实成功链使用独立站点 #15 / 渠道 #35：连接 200 → 修改 Key 清空连接记录 → 未重测提交 400 且仍为草稿 → 重测 200 → 发现并映射 18 个模型 → 正常保留单一主测模型 → 提交后状态 pending。入驻检测任务 #1 已排队，执行终态、审核通过与倍率重检待 worker。资源保留用于续跑，定时探测关闭；结果为 `artifacts/admin-success-chain-results.json`。
+真实成功链使用独立站点 #15 / 渠道 #35：连接 200 → 修改 Key 清空连接记录 → 未重测提交 400 且仍为草稿 → 重测 200 → 发现并映射 18 个模型 → 正常保留单一主测模型 → 提交后状态 pending。入驻任务 #1 已真实完成，报告 #81 为 100/genuine、八项检查。浏览器审核通过后站点进入公开目录/榜单，启用每 60 秒探测；首条 schedule 日志 #34600 在审核后 54.6 秒出现，后续状态条样本持续增长。浏览器再次手动发起任务 #60，自动轮询至 done 并刷新八项报告。资源 #15/#35 当前保留上线以供复查；前期链路证据在 `artifacts/admin-success-chain-results.json`，终态证据在 `artifacts/final/success-chain.json`、`api-regressions.json`、`browser-task.json`。
 
-真实桌面截图已覆盖首页、榜单、渠道详情、入驻向导和管理审核；390px 截图已覆盖首页、榜单、渠道详情、向导和审核，无文档横向溢出，页面捕获的运行错误为空。真实历史图表已在浏览器切换近 7 天和近 1 小时，数据加载与选中态正常。真实榜单暂无统计数据的状态已确认正常显示；首页未收到探测样本时显示「等待探测」。截图为 `apps/web/artifacts/*-real-*.png`。
+真实桌面截图已覆盖首页、榜单、渠道详情、入驻向导和管理审核；390px 截图已覆盖首页、榜单、渠道详情、向导和审核，无文档横向溢出，页面捕获的运行错误为空。真实历史图表已在浏览器切换近 7 天和近 1 小时，数据加载与选中态正常。早期无样本状态曾确认正常显示；当前 worker 已持续聚合真实统计，首页显示真实 Top3 和按最近探测时间排序的动态。截图为 `apps/web/artifacts/*-real-*.png`。
 
 真实浏览器公开鉴定显示 100/100、genuine 与八项检查，完成后 Key 输入清空，未捕获运行错误；截图 `artifacts/verify-real-report.png`。普通用户收藏在公共页面 hydration 后正确回填，第一页中四条已收藏渠道状态正确。最终 390px 榜单截图为 `artifacts/rankings-final-mobile.png`，文档宽度 390px，无运行错误；本轮 Ego TaskSpace 29 已按规范结束。
 
@@ -118,13 +118,28 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 
 可复用检查：`node apps/web/scripts/check-api-integration.mjs` 仅测试 API；加 `HUB_WEB_URL=http://127.0.0.1:3210` 检查同源代理；加 `HUB_INTEGRATION_WRITES=1` 验证用户 CRUD 并清理临时数据。详细清单和结果位于 `apps/web/artifacts/api-integration-*`。
 
+## 最终端到端验收（2026-10-22）
+
+本轮使用 ego-browser TaskSpace 31，1440×900 和 390×844 双宽度检查，截图与 JSON 证据统一放在 `apps/web/artifacts/final/`。TaskSpace 已按规范关闭；Ego Lite 有可用更新，未执行升级。
+
+- 入驻成功链：站点 #15 / 渠道 #35，入驻任务 #1 完成，报告 #81 为 100/genuine、八项检查；浏览器管理员审核通过后进入公开目录/榜单，首条定时探测在审核后 54.6 秒出现。站长浏览器再次发起任务 #60，自动轮询至 done 并刷新报告。保留站点上线、渠道 active、每 60 秒探测，供复查。
+- 公开鉴定：通过真实 API 分别鉴定 mock-upstream 的 genuine 和 fake，UI 得分为 100 / 31，分别显示真模型 / 疑似假模型和八项检查；快速模式未执行项明确标示，完成后 Key 输入清空。
+- 抖动渠道 #24：状态条包含成功和失败，约 69% 可用率与历史对应；错误按固定中文分类展示。前端将 sparkline 按时间排序，最新探测位于右侧。
+- 失效渠道 #31：已上线站点下的详情、历史和报告均可只读查看；0% 可用率、延迟无成功样本显示 —，醒目显示「该渠道已失效：连续探测失败，已停止定时检测」。隐藏去站点主按钮，metadata noindex/nofollow，sitemap 排除。暂停渠道使用相同只读逻辑和对应横幅。
+- 首页 Top3 和最近探测动态均由真实 API 提供。动态从所有 active 渠道分页获取，按 lastProbeAt 排序。Top3 最终截图真正覆盖模型切换与三条榜单。
+- 指南从 `@hub/shared` 引用 `UPTIME_SCORE_EXPONENT`、`FAKE_SCORE_CAP`，公式为可用率八次方乘 100，示例 99%→92、95%→66、90%→43、70%→6；可信分低于 50 时推荐分封顶 40。可见 FAQ 和 FAQPage JSON-LD 同步更新。
+- 检测规则：仅 baseUrl、API Key、protocol、primaryModel 变化触发自动真伪检测；倍率与资料修改不触发。入驻页和站长/管理编辑提示已同步。分组倍率、充值倍率修改与恢复均已定向复测，四次 PATCH 新增任务为零；最终倍率恢复 0.5 / 1。
+- Hero 首屏不设置 opacity:0。桌面与手机在导航后约 373ms / 360ms 完成截图，所有 Hero 元素 opacity=1；入场仅轻微位移，总时长 0.61 秒。另检查禁用 JavaScript 时首屏可见、减少动态效果时无动画。证据 `hero-visibility.json`、`motion-and-guide.json`。
+
+最终截图包括 `home-desktop/mobile.png`、`home-top3-*`、`home-activity-*`、`rankings-*`、`verify-genuine/fake-*`、`flaky-*`、`dead-*`、`merchant-report-*`、`admin-approved-*`、`guide-scoring-*`；均已目视检查。鉴定结果、审核成功链、检测任务与失效只读规则分别见 `verify-results.json`、`success-chain.json`、`browser-task.json`、`dead-browser.json`。没有未解决的前端联调阻塞。
+
 ## 尚未真实联调的接口
 
-公开目录、榜单、报告、历史、认证、完整用户评价/收藏 CRUD、站长 CRUD/模型价格、连接成功、模型发现、提交审核、实际公开鉴定与管理读取/目录 CRUD/用户/反馈/评分/审计已联调。剩余检测任务执行终态、审核成功后公开展示/统计、倍率重检链依赖 worker。Proxy 与 Cookie 透传的真实会话验证已通过。
+本次范围内无待联调接口。公开目录、榜单、报告、历史、认证、用户评价/收藏 CRUD、站长 CRUD/模型价格、连接测试、模型发现、提交审核、公开鉴定与管理读取/目录 CRUD/用户/反馈/评分/审计均已联调。真实检测终态、审核后公开展示/统计和定时探测也已联调。Proxy 与 Cookie 透传的真实会话验证已通过。
 
 ## 已知限制
 
-- 后台排队检测和统计聚合仍依赖 worker 启动；API 与 mock-upstream 已就绪。
+- 四个服务已就绪；本地真实验收使用 mock-upstream 的可控场景，不代表第三方真实中转站质量。
 - Mock 仅供开发演示，不提供持久化；其中评分、历史和报告为 fixture。
 - 移动端对比表和后台密集表格在自身容器内横向滚动。
 - Next 流式响应的部分 403/404 页面可能以 HTTP 200 返回，但内容显示对应状态；API 保持实际 401/403/404。

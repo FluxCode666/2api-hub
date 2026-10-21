@@ -320,6 +320,91 @@ describe('#5 入队去重', () => {
       SELECT count(*)::int AS cnt FROM probe_tasks WHERE channel_id = ${ctx.dear.id}`);
     expect(after[0]?.['cnt']).toBe(before[0]?.['cnt']);
   });
+
+  it('倍率变化（groupRatio/rechargeRatio）不触发检测任务', async () => {
+    const cookie = await login('test-merchant@t.dev');
+    const adminCookie = await login('test-admin@t.dev');
+    const before = await db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS cnt FROM probe_tasks WHERE channel_id = ${ctx.cheap.id}`);
+
+    // 站长 PATCH groupRatio
+    const r1 = await app.inject({
+      method: 'PATCH', url: `/api/v1/merchant/channels/${ctx.cheap.id}`, headers: { cookie },
+      payload: { groupRatio: 0.2 },
+    });
+    expect(r1.statusCode).toBe(200);
+
+    // 管理员 PATCH 站点 rechargeRatio
+    const r2 = await app.inject({
+      method: 'PATCH', url: `/api/v1/admin/sites/${ctx.site.id}`, headers: { cookie: adminCookie },
+      payload: { rechargeRatio: 0.6 },
+    });
+    expect(r2.statusCode).toBe(200);
+
+    // 管理员 PATCH 渠道 groupRatio
+    const r3 = await app.inject({
+      method: 'PATCH', url: `/api/v1/admin/channels/${ctx.cheap.id}`, headers: { cookie: adminCookie },
+      payload: { groupRatio: 0.15 },
+    });
+    expect(r3.statusCode).toBe(200);
+
+    const after = await db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS cnt FROM probe_tasks WHERE channel_id = ${ctx.cheap.id}`);
+    expect(after[0]?.['cnt']).toBe(before[0]?.['cnt']);
+
+    // 恢复
+    await db.execute(sql`UPDATE channels SET group_ratio = 0.1 WHERE id = ${ctx.cheap.id}`);
+    await db.execute(sql`UPDATE sites SET recharge_ratio = 0.5 WHERE id = ${ctx.site.id}`);
+  });
+
+  it('连接字段变化（baseUrl）触发 authenticity 任务', async () => {
+    const cookie = await login('test-merchant@t.dev');
+    // 确保站点是 approved（前面的测试可能 suspend 了流程站，但 ctx.site 是独立的）
+    await db.execute(sql`UPDATE sites SET status = 'approved' WHERE id = ${ctx.site.id}`);
+    // 清掉已有活动任务，避免复用导致 count 不变
+    await db.execute(sql`UPDATE probe_tasks SET status = 'done', finished_at = now()
+      WHERE channel_id = ${ctx.cheap.id} AND status IN ('queued','running')`);
+    const before = await db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS cnt FROM probe_tasks WHERE channel_id = ${ctx.cheap.id}`);
+    const res = await app.inject({
+      method: 'PATCH', url: `/api/v1/merchant/channels/${ctx.cheap.id}`, headers: { cookie },
+      payload: { baseUrl: 'http://127.0.0.1:8712/fast' },
+    });
+    expect(res.statusCode).toBe(200);
+    const after = await db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS cnt FROM probe_tasks WHERE channel_id = ${ctx.cheap.id}`);
+    expect(Number(after[0]?.['cnt'])).toBeGreaterThan(Number(before[0]?.['cnt']));
+    // 恢复
+    await db.execute(sql`UPDATE channels SET base_url = 'http://127.0.0.1:8712/genuine' WHERE id = ${ctx.cheap.id}`);
+  });
+});
+
+describe('失效渠道可读（编排者决策）', () => {
+  it('invalid 渠道的详情/历史/报告返回 200，榜单仍只含 active', async () => {
+    await db.execute(sql`UPDATE channels SET status = 'invalid' WHERE id = ${ctx.dear.id}`);
+
+    const detail = await app.inject({ method: 'GET', url: `/api/v1/channels/${ctx.dear.id}` });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().status).toBe('invalid');
+
+    const history = await app.inject({ method: 'GET', url: `/api/v1/channels/${ctx.dear.id}/history` });
+    expect(history.statusCode).toBe(200);
+
+    const reports = await app.inject({ method: 'GET', url: `/api/v1/channels/${ctx.dear.id}/reports` });
+    expect(reports.statusCode).toBe(200);
+
+    // 榜单仍只含 active
+    const list = await app.inject({ method: 'GET', url: '/api/v1/channels' });
+    const ids = list.json().items.map((i: { id: number }) => i.id);
+    expect(ids).toContain(ctx.cheap.id);
+    expect(ids).not.toContain(ctx.dear.id);
+
+    // /go 仍允许跳转
+    const go = await app.inject({ method: 'GET', url: `/api/v1/go/${ctx.dear.id}` });
+    expect(go.statusCode).toBe(302);
+
+    await db.execute(sql`UPDATE channels SET status = 'active' WHERE id = ${ctx.dear.id}`);
+  });
 });
 
 describe('评价', () => {

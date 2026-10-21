@@ -405,10 +405,6 @@ export async function merchantRoutes(app: FastifyInstance) {
       || (input.baseUrl !== undefined && input.baseUrl.replace(/\/$/, '') !== c.baseUrl)
       || (input.protocol !== undefined && input.protocol !== c.protocol)
       || (input.primaryModel !== undefined && input.primaryModel !== c.primaryModel);
-    // 触发检测任务的关键字段：apiKey/baseUrl/倍率
-    const criticalChanged = keyActuallyChanged
-      || (input.baseUrl !== undefined && input.baseUrl.replace(/\/$/, '') !== c.baseUrl)
-      || (input.groupRatio !== undefined && input.groupRatio !== c.groupRatio);
 
     const vendorRow = input.vendorSlug !== undefined
       ? (input.vendorSlug ? (await db.select().from(vendors).where(eq(vendors.slug, input.vendorSlug)).limit(1))[0] ?? null : null)
@@ -431,8 +427,8 @@ export async function merchantRoutes(app: FastifyInstance) {
       updatedAt: new Date(),
     }).where(eq(channels.id, c.id)).returning();
 
-    // 已上线站点修改关键字段 → 原子入队检测任务（复用已有活动任务）
-    if (criticalChanged && s.status === 'approved') {
+    // 连接相关字段变化 → 原子入队检测任务（倍率变化不触发）
+    if (connectionChanged && s.status === 'approved') {
       await enqueueProbeTask(db, { channelId: c.id, kind: 'authenticity', trigger: 'merchant', requestedBy: user.id });
     }
 

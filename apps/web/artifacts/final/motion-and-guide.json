@@ -1,0 +1,105 @@
+{
+  "checkedAt": "2026-10-21T19:07:42.693Z",
+  "checks": [
+    {
+      "mode": "javascript-disabled",
+      "result": {
+        "hero": [
+          {
+            "opacity": "1",
+            "transform": "none"
+          },
+          {
+            "opacity": "1",
+            "transform": "none"
+          },
+          {
+            "opacity": "1",
+            "transform": "none"
+          },
+          {
+            "opacity": "1",
+            "transform": "none"
+          },
+          {
+            "opacity": "1",
+            "transform": "none"
+          }
+        ],
+        "ctaVisible": true
+      }
+    },
+    {
+      "mode": "reduced-motion",
+      "result": {
+        "reduce": true,
+        "hero": [
+          {
+            "opacity": "1",
+            "transform": "none"
+          },
+          {
+            "opacity": "1",
+            "transform": "none"
+          },
+          {
+            "opacity": "1",
+            "transform": "none"
+          },
+          {
+            "opacity": "1",
+            "transform": "none"
+          },
+          {
+            "opacity": "1",
+            "transform": "none"
+          }
+        ],
+        "revealOpacity": [
+          "1",
+          "1",
+          "1",
+          "1",
+          "1",
+          "1",
+          "1",
+          "1"
+        ],
+        "animations": 0,
+        "errors": []
+      }
+    },
+    {
+      "mode": "guide-desktop",
+      "result": {
+        "formula": "可用率分项 = 24h 可用率 ^ 8 × 10099% → 92 分；95% → 66 分；90% → 43 分；70% → 6 分。以上是可用率分项得分，再按权重计入推荐分。可信分低于 50 时，推荐分最高 40 分。",
+        "faq": {
+          "@type": "Question",
+          "name": "推荐分如何体现稳定性和模型可信度？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "可用率分项按近 24h 可用率的 8 次方乘以 100 计算，再与延迟、可信度和连续稳定性加权。可信分低于 50 时，推荐分最高 40 分。价格独立比较，不计入推荐分。"
+          }
+        },
+        "overflow": false,
+        "errors": []
+      }
+    },
+    {
+      "mode": "guide-mobile",
+      "result": {
+        "formula": "可用率分项 = 24h 可用率 ^ 8 × 10099% → 92 分；95% → 66 分；90% → 43 分；70% → 6 分。以上是可用率分项得分，再按权重计入推荐分。可信分低于 50 时，推荐分最高 40 分。",
+        "faq": {
+          "@type": "Question",
+          "name": "推荐分如何体现稳定性和模型可信度？",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "可用率分项按近 24h 可用率的 8 次方乘以 100 计算，再与延迟、可信度和连续稳定性加权。可信分低于 50 时，推荐分最高 40 分。价格独立比较，不计入推荐分。"
+          }
+        },
+        "overflow": false,
+        "errors": []
+      }
+    }
+  ]
+}

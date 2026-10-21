@@ -1,0 +1,149 @@
+{
+  "startedAt": "2026-10-21T19:04:24Z",
+  "siteId": 15,
+  "channelId": 35,
+  "expectedBehavior": "最终裁决：所有倍率修改/恢复均不触发检测；仅baseUrl/apiKey/protocol/primaryModel连接变化触发authenticity",
+  "historicalBehavior": [
+    {
+      "label": "渠道分组倍率修改及恢复均完成真伪任务",
+      "status": "HISTORICAL",
+      "field": "groupRatio",
+      "original": 0.5,
+      "changedTo": 0.51,
+      "before": {
+        "siteStatus": "approved",
+        "channelStatus": "active",
+        "probeEnabled": true,
+        "probeIntervalSec": 60,
+        "groupRatio": 0.5,
+        "rechargeRatio": 1,
+        "actualRatio": 0.5
+      },
+      "changedTask": {
+        "id": 79,
+        "kind": "authenticity",
+        "trigger": "admin",
+        "status": "done",
+        "createdAt": "2026-10-21T19:01:26.276Z",
+        "startedAt": "2026-10-21T19:01:27.313Z",
+        "finishedAt": "2026-10-21T19:01:28.933Z",
+        "error": null,
+        "reused": false
+      },
+      "restoreTask": {
+        "id": 80,
+        "kind": "authenticity",
+        "trigger": "admin",
+        "status": "done",
+        "createdAt": "2026-10-21T19:01:29.361Z",
+        "startedAt": "2026-10-21T19:01:31.358Z",
+        "finishedAt": "2026-10-21T19:01:32.881Z",
+        "error": null,
+        "reused": false
+      },
+      "after": {
+        "siteStatus": "approved",
+        "channelStatus": "active",
+        "probeEnabled": true,
+        "probeIntervalSec": 60,
+        "groupRatio": 0.5,
+        "rechargeRatio": 1,
+        "actualRatio": 0.5
+      },
+      "note": "规则更新前观察的旧倍率触发任务行为，仅留历史，不代表当前验收预期"
+    }
+  ],
+  "checks": [
+    {
+      "label": "groupRatio修改和恢复均不创建任务",
+      "status": "PASS",
+      "before": {
+        "siteStatus": "approved",
+        "channelStatus": "active",
+        "probeEnabled": true,
+        "probeIntervalSec": 60,
+        "groupRatio": 0.5,
+        "rechargeRatio": 1,
+        "actualRatio": 0.5,
+        "lastTestOk": true,
+        "lastTestAt": "2026-10-21T19:03:47.436Z"
+      },
+      "change": {
+        "value": 0.51,
+        "newTasks": [],
+        "newTaskCount": 0,
+        "actualRatio": 0.51
+      },
+      "restore": {
+        "value": 0.5,
+        "newTasks": [],
+        "newTaskCount": 0,
+        "actualRatio": 0.5
+      },
+      "after": {
+        "siteStatus": "approved",
+        "channelStatus": "active",
+        "probeEnabled": true,
+        "probeIntervalSec": 60,
+        "groupRatio": 0.5,
+        "rechargeRatio": 1,
+        "actualRatio": 0.5,
+        "lastTestOk": true,
+        "lastTestAt": "2026-10-21T19:03:47.436Z"
+      }
+    },
+    {
+      "label": "rechargeRatio修改和恢复均不创建任务",
+      "status": "PASS",
+      "before": {
+        "siteStatus": "approved",
+        "channelStatus": "active",
+        "probeEnabled": true,
+        "probeIntervalSec": 60,
+        "groupRatio": 0.5,
+        "rechargeRatio": 1,
+        "actualRatio": 0.5,
+        "lastTestOk": true,
+        "lastTestAt": "2026-10-21T19:03:47.436Z"
+      },
+      "change": {
+        "value": 1.01,
+        "newTasks": [],
+        "newTaskCount": 0,
+        "actualRatio": 0.495
+      },
+      "restore": {
+        "value": 1,
+        "newTasks": [],
+        "newTaskCount": 0,
+        "actualRatio": 0.5
+      },
+      "after": {
+        "siteStatus": "approved",
+        "channelStatus": "active",
+        "probeEnabled": true,
+        "probeIntervalSec": 60,
+        "groupRatio": 0.5,
+        "rechargeRatio": 1,
+        "actualRatio": 0.5,
+        "lastTestOk": true,
+        "lastTestAt": "2026-10-21T19:03:47.436Z"
+      }
+    }
+  ],
+  "credentialsIncluded": false,
+  "updatedAt": "2026-10-21T19:04:25Z",
+  "passed": 2,
+  "failed": 0,
+  "finalState": {
+    "siteStatus": "approved",
+    "channelStatus": "active",
+    "probeEnabled": true,
+    "probeIntervalSec": 60,
+    "groupRatio": 0.5,
+    "rechargeRatio": 1,
+    "actualRatio": 0.5,
+    "lastTestOk": true,
+    "lastTestAt": "2026-10-21T19:03:47.436Z"
+  }
+}

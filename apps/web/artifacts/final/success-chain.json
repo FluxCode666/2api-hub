@@ -1,0 +1,71 @@
+{
+  "checkedAt": "2026-10-21T18:55:40.147Z",
+  "siteId": 15,
+  "channelId": 35,
+  "publicDirectory": true,
+  "publicRankings": true,
+  "stats": {
+    "uptime1h": 1,
+    "uptime24h": 0.8,
+    "uptime7d": 0.8,
+    "samples24h": 5,
+    "latencyP50": 59,
+    "latencyP95": 67,
+    "ttftAvg": 44,
+    "consecutiveFailures": 0,
+    "lastSuccessAt": "2026-10-21T18:54:28.087Z",
+    "lastFailureAt": "2026-10-21T17:42:21.318Z",
+    "lastProbeAt": "2026-10-21T18:54:28.087Z",
+    "trustScore": 100,
+    "trustVerdict": "genuine",
+    "recommendScore": null,
+    "sparkline": [
+      {
+        "t": "2026-10-21T18:54:28.000Z",
+        "ms": 68,
+        "ok": true
+      },
+      {
+        "t": "2026-10-21T18:53:23.000Z",
+        "ms": 61,
+        "ok": true
+      },
+      {
+        "t": "2026-10-21T17:46:05.000Z",
+        "ms": 57,
+        "ok": true
+      },
+      {
+        "t": "2026-10-21T17:46:05.000Z",
+        "ms": 53,
+        "ok": true
+      },
+      {
+        "t": "2026-10-21T17:42:21.000Z",
+        "ms": 7,
+        "ok": false
+      }
+    ]
+  },
+  "scheduled": [
+    {
+      "id": 34602,
+      "success": true,
+      "at": "2026-10-21T18:55:28.138Z",
+      "trigger": "schedule"
+    },
+    {
+      "id": 34601,
+      "success": true,
+      "at": "2026-10-21T18:54:28.087Z",
+      "trigger": "schedule"
+    },
+    {
+      "id": 34600,
+      "success": true,
+      "at": "2026-10-21T18:53:23.019Z",
+      "trigger": "schedule"
+    }
+  ],
+  "elapsedApprovalToFirstScheduleSec": 54.585
+}

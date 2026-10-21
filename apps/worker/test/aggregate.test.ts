@@ -73,7 +73,9 @@ describe('buildChannelStat（纯函数）', () => {
     // uptime=0 + trust 无报告（默认 60）+ 连败 1008 → 低分
     expect(dead.recommendScore!).toBeLessThan(40);
     const flaky = buildChannelStat(fakeRow({ uptime_24h: '0.6', latency_p50: 2000, consecutive_failures: 2 }), { weights: WEIGHTS, minSamplesForScore: 6 });
-    expect(flaky.recommendScore!).toBeGreaterThan(50);
+    // 可用率非线性计分（uptime^8）：60% 可用率的渠道应明显低于健康渠道，但高于 dead 渠道
+    expect(flaky.recommendScore!).toBeGreaterThan(dead.recommendScore!);
+    expect(flaky.recommendScore!).toBeLessThan(60);
     expect(flaky.recommendScore!).toBeGreaterThan(dead.recommendScore!);
   });
 

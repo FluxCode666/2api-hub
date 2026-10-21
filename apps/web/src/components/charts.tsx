@@ -3,11 +3,13 @@ import { VERDICT_LABELS } from '@hub/shared';
 import { ShieldCheck } from '@phosphor-icons/react/dist/ssr';
 
 export function UptimeBar({ points }: { points: SparkPoint[] }) {
-  const slots = Array.from({length:60},(_,i) => points[points.length-60+i]);
+  const ordered = [...points].sort((a,b) => Date.parse(a.t)-Date.parse(b.t)).slice(-60);
+  const slots = Array.from({length:60},(_,i) => ordered[ordered.length-60+i]);
   return <div className="uptime-bar" role="img" aria-label={`最近 ${points.length} 次探测，${points.filter(p=>p.ok).length} 次成功；灰色为无样本`}>{slots.map((p,i)=><span key={i} className={!p?'unknown':p.ok?'ok':'fail'} title={p?`${new Date(p.t).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai'})} · ${p.ok?`成功 ${p.ms??'—'}ms`:'失败'}`:'无样本'}/>)}</div>;
 }
 export function Sparkline({ points }: { points: SparkPoint[] }) {
-  const values=points.flatMap((p,i)=>p.ms==null?[]:[{v:p.ms,x:i}]);
+  const ordered=[...points].sort((a,b)=>Date.parse(a.t)-Date.parse(b.t));
+  const values=ordered.flatMap((p,i)=>p.ms==null?[]:[{v:p.ms,x:i}]);
   if(values.length<2)return <div className="muted" style={{fontSize:11}}>样本不足</div>;
   const max=Math.max(...values.map(p=>p.v),1),min=Math.min(...values.map(p=>p.v));
   const d=values.map((p,i)=>`${i?'L':'M'}${p.x/Math.max(points.length-1,1)*200},${35-(p.v-min)/Math.max(max-min,1)*28}`).join(' ');

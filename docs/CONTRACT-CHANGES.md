@@ -25,3 +25,7 @@
 - 原因：审查 #5 发现并发/多入口可重复入队同一渠道同类型任务。原子入队 `enqueueProbeTask()`（`SELECT ... FOR UPDATE` + 复用活动任务）已上线，此索引作为数据库层兜底。
 - 兼容性：向后兼容（新增索引，不改已有字段）；需先清理存量重复活动任务（当前库经原子入队修复后不会产生）。
 - 不改 schema.ts（索引由迁移 SQL 直接创建，schema 的 index 声明是查询优化的提示，部分唯一索引的 WHERE 子句在 drizzle schema 中不支持，故放迁移文件）。
+
+## 2026-10-22 推荐分可用率改为非线性 —— 编排者
+
+> `computeRecommendScore` 中 `uptime_part` 由 `uptime24h × 100` 改为 `uptime24h ^ 8 × 100`（常量 `UPTIME_SCORE_EXPONENT`）。原因：线性计分下 69% 可用率渠道推荐分仍有 81.9，与 99% 渠道差距过小。前端 `/guide` 公式说明需同步。另：可信分 < 50（判为假模型）时推荐分封顶 40（常量 `FAKE_SCORE_CAP`）。

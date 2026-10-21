@@ -1,0 +1,32 @@
+[
+  {
+    "path": "/merchant/channels/35",
+    "width": 1440,
+    "documentWidth": 1440,
+    "reportChecks": 8,
+    "errors": []
+  },
+  {
+    "path": "/channels/35",
+    "width": 1440,
+    "documentWidth": 1440,
+    "bars": 6,
+    "reportChecks": 8,
+    "errors": []
+  },
+  {
+    "path": "/merchant/channels/35",
+    "width": 390,
+    "documentWidth": 390,
+    "reportChecks": 8,
+    "errors": []
+  },
+  {
+    "path": "/channels/35",
+    "width": 390,
+    "documentWidth": 390,
+    "bars": 6,
+    "reportChecks": 8,
+    "errors": []
+  }
+]

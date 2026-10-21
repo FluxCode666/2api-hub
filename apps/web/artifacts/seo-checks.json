@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-10-21T17:54:50.560Z",
-  "web": "http://127.0.0.1:49321",
+  "checkedAt": "2026-10-21T19:09:03.032Z",
+  "web": "http://127.0.0.1:3210",
   "passed": 25,
   "failed": 0,
   "checks": [
@@ -65,14 +65,14 @@
       "detail": "Fable 5.1 中转站价格对比与实测排名 · 2API Hub"
     },
     {
-      "label": "独立 metadata /sites/xinghe-api",
+      "label": "独立 metadata /sites/qingyun-hub",
       "status": "PASS",
-      "detail": "星河API 中转站评测、渠道价格与用户评价 · 2API Hub"
+      "detail": "青云中转 中转站评测、渠道价格与用户评价 · 2API Hub"
     },
     {
-      "label": "独立 metadata /channels/1",
+      "label": "独立 metadata /channels/16",
       "status": "PASS",
-      "detail": "星河API Claude 官转 渠道价格与实测记录 · 2API Hub"
+      "detail": "青云中转 GPT 官方 渠道价格与实测记录 · 2API Hub"
     },
     {
       "label": "独立 metadata /vendors/anthropic",
@@ -112,22 +112,22 @@
     {
       "label": "sitemap 完整收录公开目录",
       "status": "PASS",
-      "detail": "79 个唯一 URL"
+      "detail": "80 个唯一 URL"
     },
     {
       "label": "OG 图像 /",
       "status": "PASS",
-      "detail": "81068 bytes，1200×630"
+      "detail": "81174 bytes，1200×630"
     },
     {
       "label": "OG 图像 /models/claude-fable-5-1",
       "status": "PASS",
-      "detail": "56565 bytes，1200×630"
+      "detail": "55681 bytes，1200×630"
     },
     {
-      "label": "OG 图像 /sites/xinghe-api",
+      "label": "OG 图像 /sites/qingyun-hub",
       "status": "PASS",
-      "detail": "53855 bytes，1200×630"
+      "detail": "53795 bytes，1200×630"
     }
   ]
 }

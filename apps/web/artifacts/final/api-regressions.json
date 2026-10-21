@@ -1,0 +1,85 @@
+{
+  "checkedAt": "2026-10-21T18:53:22Z",
+  "scope": "独立资源状态与只读公开回归；唯一写入为渠道35空Key PATCH",
+  "resources": {
+    "siteId": 15,
+    "channelId": 35,
+    "taskId": 1
+  },
+  "checks": [
+    {
+      "label": "独立site15/channel35/task1当前状态",
+      "status": "PASS",
+      "detail": {
+        "siteStatus": "approved",
+        "channelStatus": "active",
+        "probeEnabled": true,
+        "lastTestOk": true,
+        "task": {
+          "id": 1,
+          "status": "done",
+          "startedAt": "2026-10-21T18:48:33.792Z",
+          "finishedAt": "2026-10-21T18:48:35.313Z"
+        }
+      }
+    },
+    {
+      "label": "worker完成后的真伪检测报告DTO",
+      "status": "PASS",
+      "detail": {
+        "id": "81",
+        "model": "gpt-6.1-sol",
+        "score": 100,
+        "verdict": "genuine",
+        "checks": 8,
+        "createdAt": "2026-10-21T18:48:35.307Z"
+      }
+    },
+    {
+      "label": "空Key PATCH保留旧凭据与连接状态",
+      "status": "PASS",
+      "detail": {
+        "httpStatus": 200,
+        "keyMaskPreserved": true,
+        "lastTestOkPreserved": true,
+        "lastTestAtPreserved": true,
+        "probeEnabledPreserved": true
+      }
+    },
+    {
+      "label": "全量公开榜单模型去重",
+      "status": "PASS",
+      "detail": {
+        "channelsChecked": 32,
+        "uniqueChannelRows": true,
+        "duplicateUpstreamModelChannels": [],
+        "channelsWithAliasesToSameCatalogModel": [
+          6,
+          17
+        ],
+        "dedupKey": "channelId+upstreamName"
+      }
+    },
+    {
+      "label": "公开历史错误使用固定中文分类",
+      "status": "PASS",
+      "detail": {
+        "channelsChecked": 32,
+        "runsChecked": 1553,
+        "failureSamples": 96,
+        "observedCategories": {
+          "http_5xx": "上游服务错误（5xx）",
+          "timeout": "连接超时",
+          "http_429": "触发限流（429）",
+          "network": "网络错误"
+        },
+        "fixedLabelsMatch": true,
+        "rawUpstreamOrSecretLeak": false
+      }
+    }
+  ],
+  "observedSiteState": "approved",
+  "passed": 5,
+  "failed": 0,
+  "secretsIncluded": false
+}

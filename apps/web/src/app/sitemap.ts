@@ -34,7 +34,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     ...staticPages,
     ...sites.map(site => ({ url: absoluteUrl(`/sites/${encodeURIComponent(site.slug)}`), changeFrequency: 'daily' as const, priority: 0.7 })),
-    ...channels.map(channel => ({ url: absoluteUrl(`/channels/${channel.id}`), changeFrequency: 'hourly' as const, priority: 0.6 })),
+    ...channels.filter(channel => channel.status === 'active').map(channel => ({ url: absoluteUrl(`/channels/${channel.id}`), changeFrequency: 'hourly' as const, priority: 0.6 })),
     ...models.map(model => ({ url: absoluteUrl(`/models/${encodeURIComponent(model.slug)}`), changeFrequency: 'daily' as const, priority: 0.8 })),
     ...vendors.map(vendor => ({ url: absoluteUrl(`/vendors/${encodeURIComponent(vendor.slug)}`), changeFrequency: 'weekly' as const, priority: 0.6 })),
   ];

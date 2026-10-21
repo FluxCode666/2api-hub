@@ -1,0 +1,26 @@
+[
+  {
+    "path": "/",
+    "status": 200,
+    "runtimeError": false
+  },
+  {
+    "path": "/guide",
+    "status": 200,
+    "runtimeError": false,
+    "newFormula": true
+  },
+  {
+    "path": "/join",
+    "status": 200,
+    "runtimeError": false,
+    "ratioRule": true
+  },
+  {
+    "path": "/channels/31",
+    "status": 200,
+    "runtimeError": false,
+    "invalidBanner": true,
+    "noindex": true
+  }
+]

@@ -27,7 +27,7 @@ export function SiteForm({ site, onSave, submitLabel = '保存站点' }: { site?
       <Field label="官网地址"><input className="input" name="homepageUrl" type="url" defaultValue={site?.homepageUrl} placeholder="https://example.com" required /></Field>
       <Field label="邀请链接（可选）"><input className="input" name="inviteUrl" type="url" defaultValue={site?.inviteUrl ?? ''} placeholder="https://example.com/register?aff=..." /></Field>
       {!site && <Field label="站点标识（可选）" hint="用于公开档案网址，留空将自动生成。"><input className="input" name="slug" pattern="[a-z0-9-]+" placeholder="my-api" /></Field>}
-      <Field label="充值倍率" hint="每充值 ¥1 获得多少美元额度。例如 ¥1 = $1 额度，填 1。"><input className="input mono" name="rechargeRatio" type="number" min="0.000001" step="any" defaultValue={site?.rechargeRatio ?? 1} required /></Field>
+      <Field label="充值倍率" hint="每充值 ¥1 获得多少美元额度。例如 ¥1 = $1 额度，填 1。修改仅更新价格，不触发检测。"><input className="input mono" name="rechargeRatio" type="number" min="0.000001" step="any" defaultValue={site?.rechargeRatio ?? 1} required /></Field>
       <Field label="Logo 地址（可选）"><input className="input" name="logoUrl" type="url" defaultValue={site?.logoUrl ?? ''} placeholder="https://example.com/logo.png" /></Field>
       <Field label="标签" hint="使用逗号分隔。"><input className="input" name="tags" defaultValue={site?.tags.join(', ')} placeholder="企业服务, 支持开票" /></Field>
     </div>
@@ -69,6 +69,7 @@ export function ChannelForm({ channel, vendors, models, onSave, submitLabel = '�
     </div>
     <datalist id="merchant-models">{models.map((m) => <option key={m.slug} value={m.slug}>{m.displayName}</option>)}</datalist>
     {!channel ? <Field label="声明模型列表" hint="每行一个上游模型名，也可以使用逗号分隔。之后可从接口获取模型列表。"><textarea className="input mono" name="declaredModels" rows={4} /></Field> : <p className="muted merchant-small">模型列表、目录映射与覆盖价请在下方「模型映射与价格」中统一维护。</p>}
+    {channel && <p className="merchant-key-note">已上线渠道修改接口地址、API Key、协议或主测模型后会自动重新检测。倍率和资料修改不触发检测。</p>}
     <Field label="渠道说明"><textarea className="input" name="description" defaultValue={channel?.description ?? ''} rows={2} /></Field>
     {error && <div role="alert" className="notice notice-error">{error}</div>}
     <div className="row"><button className="btn btn-primary" type="submit" disabled={busy}>{busy ? '正在保存…' : submitLabel}</button></div>
