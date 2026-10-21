@@ -69,13 +69,23 @@ async function resolveWithCache(hostname: string): Promise<string[]> {
 
 /**
  * 创建"只连接已校验 IP"的 undici Agent。
- * connect 回调里对每个候选 IP 做 isPrivateIp 检查（allowPrivate 除外）。
+ * connect 回调里对每个候选 IP 做 isPrivateIp 检查（allowPrivate 除外），并按协议
+ * 建立正确的连接：http → 明文 TCP；https → tls.connect（SNI/证书链/主机名校验
+ * 全部走 Node 默认逻辑，servername 保持原域名）。IP 锁定到已校验地址，防 TOCTOU。
  */
 export function createSafeAgent(allowPrivate: boolean): Agent {
   return new Agent({
     connect: async (opts, callback) => {
       const hostname = String(opts.hostname ?? '');
-      const port = typeof opts.port === 'string' ? Number.parseInt(opts.port, 10) : (opts.port ?? 80);
+      const protocol = String(opts.protocol ?? 'http:');
+      // undici connect 回调里 port 是字符串：URL 未显式带端口时为空串（https 隐含 443 / http 80）
+      const rawPort = typeof opts.port === 'string' ? Number.parseInt(opts.port, 10) : (opts.port ?? 0);
+      let port: number;
+      if (Number.isFinite(rawPort) && rawPort > 0) {
+        port = rawPort;
+      } else {
+        port = protocol === 'https:' ? 443 : 80;
+      }
       try {
         const ips = await resolveWithCache(hostname);
         if (ips.length === 0) {
@@ -89,10 +99,29 @@ export function createSafeAgent(allowPrivate: boolean): Agent {
             return;
           }
         }
-        // 锁定到首个已校验 IP 建立 TCP 连接（TLS SNI/Host 头仍用域名）
-        const net = await import('node:net');
-        const socket = net.connect({ host: ips[0] ?? hostname, port: port as number });
-        callback(null, socket as never);
+        // IP 选择：锁定连接后失去 undici 的 happy-eyeballs 回退能力，而部分网络
+        // IPv6 出网不通（DNS 常返回 [IPv6, IPv4]），故公网目标优先挑 IPv4；
+        // allowPrivate（mock/本地）保持取首个。
+        let ip = ips[0] ?? hostname;
+        if (!allowPrivate) {
+          const v4 = ips.find((a) => isIP(a) === 4);
+          if (v4) ip = v4;
+        }
+        if (protocol === 'https:') {
+          // TLS：host 锁定已校验 IP，servername（SNI + 主机名/证书校验）用原域名；
+          // rejectUnauthorized 走 Node 默认 true——证书链 + 主机名全部校验
+          const tls = await import('node:tls');
+          const socket = tls.connect({
+            host: ip,
+            port: port as number,
+            servername: hostname,
+          });
+          callback(null, socket as never);
+        } else {
+          const net = await import('node:net');
+          const socket = net.connect({ host: ip, port: port as number });
+          callback(null, socket as never);
+        }
       } catch (err) {
         callback(err instanceof Error ? err : new Error(String(err)), null);
       }

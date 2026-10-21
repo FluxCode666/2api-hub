@@ -20,10 +20,19 @@ export interface AppOptions {
   logger?: boolean;
 }
 
+/** 从 TRUST_PROXY 环境变量解析 trustProxy（默认 false，不信任任何代理头） */
+function resolveTrustProxy(): boolean | string | string[] {
+  const v = process.env.TRUST_PROXY;
+  if (!v || v === 'false' || v === '0') return false;
+  if (v === 'true' || v === '1') return true;
+  // 'loopback' / 'linklocal' / 'uniquelocal' 或具体网段（逗号分隔）
+  return v.includes(',') ? v.split(',').map((s) => s.trim()) : v;
+}
+
 export async function buildApp(opts: AppOptions = {}) {
   const app = Fastify({
     logger: opts.logger ?? false,
-    trustProxy: true,
+    trustProxy: resolveTrustProxy(),
   });
 
   const { db, sql } = createDb(opts.databaseUrl ?? process.env.DATABASE_URL);

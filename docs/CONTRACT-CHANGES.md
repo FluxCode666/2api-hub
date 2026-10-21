@@ -18,3 +18,10 @@
 ## 2026-10-22 AdminVendor —— 编排者已批准并落地
 
 > 新增 `AdminVendor extends VendorSummary { website; description; sortOrder }`，`GET /admin/vendors` 返回 `AdminVendor[]`。由 Kimi 实现。
+
+## 2026-10-22 probe_tasks 活动任务部分唯一索引 —— Kimi（审查修复 #5）
+
+- 变更：新增增量迁移 `packages/db/drizzle/0001_probe_tasks_active_uq.sql`，创建部分唯一索引 `probe_tasks_active_uq ON probe_tasks (channel_id, kind) WHERE status IN ('queued','running')`。
+- 原因：审查 #5 发现并发/多入口可重复入队同一渠道同类型任务。原子入队 `enqueueProbeTask()`（`SELECT ... FOR UPDATE` + 复用活动任务）已上线，此索引作为数据库层兜底。
+- 兼容性：向后兼容（新增索引，不改已有字段）；需先清理存量重复活动任务（当前库经原子入队修复后不会产生）。
+- 不改 schema.ts（索引由迁移 SQL 直接创建，schema 的 index 声明是查询优化的提示，部分唯一索引的 WHERE 子句在 drizzle schema 中不支持，故放迁移文件）。

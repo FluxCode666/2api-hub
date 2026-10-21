@@ -32,5 +32,16 @@
     "channelId": null,
     "trigger": "public",
     "createdAt": "2026-10-21T17:41:14.719Z"
+  },
+  "historical": true,
+  "resolved": true,
+  "resolution": {
+    "cause": "Node 内置 fetch 与外部 undici Agent 版本不兼容，probe 已统一使用同包 fetch/Agent",
+    "latestResult": "真实浏览器 100/100、genuine、八项检查；输入 Key 已清空；API 联调 25 PASS/0 FAIL/0 SKIP",
+    "evidence": [
+      "verify-real-report.png",
+      "api-integration-results.json",
+      "admin-success-chain-results.json"
+    ]
   }
 }

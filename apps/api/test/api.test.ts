@@ -1,6 +1,8 @@
 /*
- * API 集成测试（vitest）：使用开发库，测试前重置数据，结束后重新 seed。
- * 覆盖：入驻→提交→审核流程、越权访问、Key 不泄露、榜单筛选排序。
+ * API 集成测试（vitest）：使用独立测试库 hub_test（不动开发库）。
+ * 运行前确保 hub_test 已执行迁移：
+ *   DATABASE_URL=postgres://hub:hub@127.0.0.1:54329/hub_test pnpm --filter @hub/db migrate
+ * 覆盖：入驻→提交→审核流程、越权访问、Key 不泄露、榜单筛选排序、#7 榜单去重、#5 入队去重。
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
@@ -10,21 +12,25 @@ import { fileURLToPath } from 'node:url';
 
 config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../../../.env') });
 
+// 独立测试库（与开发库隔离）
+const TEST_DATABASE_URL = process.env.DATABASE_URL?.replace(/\/hub$/, '/hub_test')
+  ?? 'postgres://hub:hub@127.0.0.1:54329/hub_test';
+process.env.DATABASE_URL = TEST_DATABASE_URL;
+
 import { buildApp } from '../src/app';
 import { createDb, encryptSecret, schema } from '@hub/db';
 import { sql } from 'drizzle-orm';
 
 let app: FastifyInstance;
-const { db, sql: pg } = createDb(process.env.DATABASE_URL);
+const { db, sql: pg } = createDb(TEST_DATABASE_URL);
 
-async function resetBusinessTables() {
+async function resetAll() {
   await db.execute(sql`TRUNCATE probe_runs, probe_tasks, authenticity_reports, channel_models,
     channel_stats, site_stats, favorites, reviews, notifications, channels, sites,
-    verify_requests, feedback, announcements, audit_logs RESTART IDENTITY CASCADE`);
-  await db.execute(sql`DELETE FROM users WHERE email LIKE 'test-%@t.dev'`);
+    verify_requests, feedback, announcements, audit_logs, settings,
+    models, vendors, users RESTART IDENTITY CASCADE`);
 }
 
-/** 最小数据：admin + merchant + 一个 approved 站点 + 两个渠道 */
 async function seedMinimal() {
   const bcrypt = (await import('bcryptjs')).default;
   const hash = await bcrypt.hash('password123', 10);
@@ -38,8 +44,14 @@ async function seedMinimal() {
     email: 'test-other@t.dev', passwordHash: hash, nickname: 'T别人', role: 'user',
   }).returning();
 
-  const [vendor] = await db.select().from(schema.vendors).where(sql`slug = 'anthropic'`).limit(1);
-  const [model] = await db.select().from(schema.models).where(sql`slug = 'claude-opus-5-5'`).limit(1);
+  const [vendor] = await db.insert(schema.vendors).values({
+    slug: 'anthropic', name: 'Anthropic', color: '#D97757', sortOrder: 1,
+  }).returning();
+  const [model] = await db.insert(schema.models).values({
+    slug: 'claude-opus-5-5', displayName: 'Opus 5.5', vendorId: vendor!.id,
+    aliases: ['claude-opus-5-5'], defaultProtocol: 'anthropic',
+    officialInputPrice: 15, officialOutputPrice: 75,
+  }).returning();
 
   const [site] = await db.insert(schema.sites).values({
     ownerId: merchant!.id, slug: 't-site', name: 'T站', homepageUrl: 'https://t.dev',
@@ -68,8 +80,8 @@ async function seedMinimal() {
     return c!;
   };
 
-  const cheap = await mkChannel('T低价渠道', 0.1, 0.99);   // actualRatio = 0.2
-  const dear = await mkChannel('T高价渠道', 1.0, 0.95);    // actualRatio = 2.0
+  const cheap = await mkChannel('T低价渠道', 0.1, 0.99);
+  const dear = await mkChannel('T高价渠道', 1.0, 0.95);
 
   return { admin: admin!, merchant: merchant!, other: other!, site: site!, cheap, dear, vendor: vendor!, model: model! };
 }
@@ -89,7 +101,7 @@ async function login(email: string): Promise<string> {
 let ctx: Awaited<ReturnType<typeof seedMinimal>>;
 
 beforeAll(async () => {
-  await resetBusinessTables();
+  await resetAll();
   ctx = await seedMinimal();
   app = await buildApp({ logger: false });
   await app.ready();
@@ -97,11 +109,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await app.close();
-  // 恢复演示数据
-  const { execSync } = await import('node:child_process');
-  execSync('pnpm --filter @hub/db seed', { cwd: '/Users/duegin/project/2api-hub', stdio: 'pipe' });
   await pg.end();
-}, 60000);
+});
 
 describe('认证', () => {
   it('注册→me→登出', async () => {
@@ -132,9 +141,8 @@ describe('榜单筛选与排序', () => {
     const body = res.json();
     expect(body.items.length).toBe(2);
     const prices = body.items.map((i: { price: { inputCny: number } | null }) => i.price?.inputCny ?? Infinity);
-    expect(prices).toEqual([...prices].sort((a, b) => a - b));
+    expect(prices).toEqual([...prices].sort((a: number, b: number) => a - b));
     expect(body.items[0].name).toBe('T低价渠道');
-    // rank 从 1 开始
     expect(body.items[0].rank).toBe(1);
   });
 
@@ -145,19 +153,29 @@ describe('榜单筛选与排序', () => {
     expect(body.items[0].name).toBe('T低价渠道');
   });
 
-  it('按模型筛选价格', async () => {
+  it('按模型筛选价格（官方价 × 实际倍率）', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/channels?model=claude-opus-5-5&sort=price' });
     const body = res.json();
     expect(body.items.length).toBe(2);
-    // 官方价 15 $/M × actualRatio 0.2 = 3 ¥/M
     expect(body.items[0].price.inputCny).toBeCloseTo(3, 1);
   });
 
-  it('stableOnly 过滤', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/v1/channels?stableOnly=true' });
+  it('#7 按模型查询不重复上榜（同渠道多别名映射同一模型）', async () => {
+    // 给低价渠道加第二个别名映射到同一模型
+    await db.insert(schema.channelModels).values({
+      channelId: ctx.cheap.id, upstreamName: 'claude-opus-5.5-alias', modelId: ctx.model.id,
+      lastStatus: 'pass', trustScore: 90, trustVerdict: 'genuine',
+    }).onConflictDoNothing();
+    const res = await app.inject({ method: 'GET', url: '/api/v1/channels?model=claude-opus-5-5&pageSize=100' });
     const body = res.json();
-    // 两个渠道 uptime 0.99/0.95，样本 100 ≥ 12，都满足
-    expect(body.items.length).toBe(2);
+    const ids = body.items.map((i: { id: number }) => i.id);
+    expect(ids.length).toBe(new Set(ids).size); // 无重复
+    expect(body.total).toBe(ids.length);
+  });
+
+  it('stableOnly 过滤（true/false 显式解析）', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/v1/channels?stableOnly=true' });
+    expect(res.json().items.length).toBe(2);
     const res2 = await app.inject({ method: 'GET', url: '/api/v1/channels?stableOnly=false' });
     expect(res2.json().items.length).toBe(2);
   });
@@ -180,7 +198,6 @@ describe('榜单筛选与排序', () => {
 describe('入驻→提交→审核流程', () => {
   it('完整流程：注册→建站→建渠道→提交→管理员审核→角色升级→公开可见', async () => {
     const cookie = await login('test-other@t.dev');
-    // 创建站点
     const siteRes = await app.inject({
       method: 'POST', url: '/api/v1/merchant/sites', headers: { cookie },
       payload: { name: '流程站', homepageUrl: 'https://flow.dev', type: 'new_api', rechargeRatio: 0.5 },
@@ -188,7 +205,6 @@ describe('入驻→提交→审核流程', () => {
     expect(siteRes.statusCode).toBe(201);
     const siteId = siteRes.json().id;
 
-    // 创建渠道
     const chRes = await app.inject({
       method: 'POST', url: `/api/v1/merchant/sites/${siteId}/channels`, headers: { cookie },
       payload: { name: '流程渠道', protocol: 'anthropic', baseUrl: 'http://127.0.0.1:8712/genuine', apiKey: 'sk-flow-test-00000002', groupRatio: 0.5, primaryModel: 'claude-opus-5-5', declaredModels: ['claude-opus-5-5'] },
@@ -196,17 +212,14 @@ describe('入驻→提交→审核流程', () => {
     expect(chRes.statusCode).toBe(201);
     const channelId = chRes.json().id;
 
-    // 未测试就提交 → 400
     const early = await app.inject({ method: 'POST', url: `/api/v1/merchant/sites/${siteId}/submit`, headers: { cookie } });
     expect(early.statusCode).toBe(400);
 
-    // 手动置 lastTestOk（probe 未实现时模拟测试通过）
     await db.execute(sql`UPDATE channels SET last_test_ok = true, last_test_at = now() WHERE id = ${channelId}`);
 
     const submit = await app.inject({ method: 'POST', url: `/api/v1/merchant/sites/${siteId}/submit`, headers: { cookie } });
     expect(submit.statusCode).toBe(200);
 
-    // 管理员审核
     const adminCookie = await login('test-admin@t.dev');
     const approve = await app.inject({
       method: 'POST', url: `/api/v1/admin/sites/${siteId}/review`, headers: { cookie: adminCookie },
@@ -214,19 +227,15 @@ describe('入驻→提交→审核流程', () => {
     });
     expect(approve.statusCode).toBe(200);
 
-    // owner 角色升级为 merchant
     const me = await app.inject({ method: 'GET', url: '/api/v1/auth/me', headers: { cookie } });
     expect(me.json().role).toBe('merchant');
 
-    // 公开可见
     const pub = await app.inject({ method: 'GET', url: '/api/v1/sites?q=流程' });
     expect(pub.json().total).toBe(1);
 
-    // 通知已创建
     const notif = await app.inject({ method: 'GET', url: '/api/v1/me/notifications', headers: { cookie } });
     expect(notif.json().some((n: { type: string }) => n.type === 'site_approved')).toBe(true);
 
-    // 驳回流程
     const rej = await app.inject({
       method: 'POST', url: `/api/v1/admin/sites/${siteId}/review`, headers: { cookie: adminCookie },
       payload: { action: 'suspend', reason: '测试下架' },
@@ -265,16 +274,51 @@ describe('Key 不泄露', () => {
     const cookie = await login('test-merchant@t.dev');
     const res = await app.inject({ method: 'GET', url: `/api/v1/merchant/sites/${ctx.site.id}`, headers: { cookie } });
     expect(res.statusCode).toBe(200);
-    const raw = res.body;
-    expect(raw).not.toContain('sk-test-secret-key-0001');
-    expect(raw).not.toContain('apiKeyEnc');
-    expect(raw).toContain('sk-****0001');
+    expect(res.body).not.toContain('sk-test-secret-key-0001');
+    expect(res.body).not.toContain('apiKeyEnc');
+    expect(res.body).toContain('sk-****0001');
   });
 
   it('公开渠道详情不含 Key 字段', async () => {
     const res = await app.inject({ method: 'GET', url: `/api/v1/channels/${ctx.cheap.id}` });
     expect(res.statusCode).toBe(200);
     expect(res.body).not.toContain('apiKey');
+  });
+});
+
+describe('#5 入队去重', () => {
+  it('同一渠道同 kind 已有活动任务时复用（不重复入队）', async () => {
+    const cookie = await login('test-merchant@t.dev');
+    // 连续两次触发，第二次应复用第一个任务
+    const r1 = await app.inject({ method: 'POST', url: `/api/v1/merchant/channels/${ctx.cheap.id}/authenticity`, headers: { cookie }, payload: {} });
+    expect([200, 202]).toContain(r1.statusCode);
+    const taskId = r1.json().id;
+
+    const r2 = await app.inject({ method: 'POST', url: `/api/v1/merchant/channels/${ctx.cheap.id}/authenticity`, headers: { cookie }, payload: {} });
+    expect(r2.statusCode).toBe(200); // 复用返回 200
+    expect(r2.json().id).toBe(taskId);
+
+    // 确认只有一个活动任务
+    const rows = await db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS cnt FROM probe_tasks
+      WHERE channel_id = ${ctx.cheap.id} AND kind = 'authenticity' AND status IN ('queued','running')`);
+    expect(rows[0]?.['cnt']).toBe(1);
+  });
+
+  it('PATCH 相同 Key 不产生新任务', async () => {
+    const cookie = await login('test-merchant@t.dev');
+    const before = await db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS cnt FROM probe_tasks WHERE channel_id = ${ctx.dear.id}`);
+    // 传入与当前相同的 Key
+    await db.execute(sql`UPDATE channels SET api_key_enc = ${encryptSecret('sk-same-key-00000003')} WHERE id = ${ctx.dear.id}`);
+    const res = await app.inject({
+      method: 'PATCH', url: `/api/v1/merchant/channels/${ctx.dear.id}`, headers: { cookie },
+      payload: { apiKey: 'sk-same-key-00000003' },
+    });
+    expect(res.statusCode).toBe(200);
+    const after = await db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS cnt FROM probe_tasks WHERE channel_id = ${ctx.dear.id}`);
+    expect(after[0]?.['cnt']).toBe(before[0]?.['cnt']);
   });
 });
 
@@ -288,7 +332,6 @@ describe('评价', () => {
     expect(r1.statusCode).toBe(201);
     const reviewId = r1.json().id;
 
-    // 再提交为更新
     const r2 = await app.inject({
       method: 'POST', url: `/api/v1/sites/${ctx.site.slug}/reviews`, headers: { cookie },
       payload: { rating: 4, content: '还行' },
@@ -304,7 +347,6 @@ describe('评价', () => {
     const del = await app.inject({ method: 'DELETE', url: `/api/v1/me/reviews/${reviewId}`, headers: { cookie } });
     expect(del.statusCode).toBe(200);
 
-    // 删别人的 → 404
     const del2 = await app.inject({ method: 'DELETE', url: `/api/v1/me/reviews/${reviewId}`, headers: { cookie } });
     expect(del2.statusCode).toBe(404);
   });

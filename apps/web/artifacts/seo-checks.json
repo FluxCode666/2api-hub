@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-10-21T17:51:55.306Z",
-  "web": "http://127.0.0.1:3210",
+  "checkedAt": "2026-10-21T17:54:50.560Z",
+  "web": "http://127.0.0.1:49321",
   "passed": 25,
   "failed": 0,
   "checks": [
@@ -112,12 +112,12 @@
     {
       "label": "sitemap 完整收录公开目录",
       "status": "PASS",
-      "detail": "81 个唯一 URL"
+      "detail": "79 个唯一 URL"
     },
     {
       "label": "OG 图像 /",
       "status": "PASS",
-      "detail": "80931 bytes，1200×630"
+      "detail": "81068 bytes，1200×630"
     },
     {
       "label": "OG 图像 /models/claude-fable-5-1",

@@ -6,18 +6,21 @@ import { z } from 'zod';
 import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   authenticityReports, channelModels, channels, probeRuns, probeTasks,
-  settings, sites, siteStats, vendors, models,
+  sites, siteStats, vendors, models,
 } from '@hub/db';
+import { actualRatio } from '@hub/shared';
 import type {
   ChannelInput, ChannelModelsInput, MerchantChannel, MerchantChannelModel,
   MerchantOverview, MerchantSite, MerchantSiteDetail, Paginated, ProbeResult, ProbeRun,
   ProbeTask, SiteInput, AuthenticityReport,
 } from '@hub/shared';
-import { DEFAULT_SETTINGS } from '@hub/shared';
-import { actualRatio } from '@hub/shared';
+
 import { badRequest, forbidden, isProbeNotImplemented, notFound, probeUnavailable, HttpError } from '../lib/errors';
+import { httpUrl } from '../lib/url';
 import { channelStatsView, iso, probeRunView, reportView, siteStatsView, taskView, vendorRef } from '../lib/serialize';
 import { decryptSecret, encryptSecret, maskSecret } from '@hub/db';
+import { sanitizeKeyFromText } from '../lib/sanitize';
+import { enqueueProbeTask } from '../lib/enqueue';
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 const pageQuery = z.object({
@@ -28,9 +31,9 @@ const pageQuery = z.object({
 const siteInputSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().regex(/^[a-z0-9-]+$/).max(100).optional(),
-  homepageUrl: z.string().url().max(500),
-  inviteUrl: z.string().url().max(500).nullish(),
-  logoUrl: z.string().url().max(500).nullish(),
+  homepageUrl: httpUrl(),
+  inviteUrl: httpUrl().nullish(),
+  logoUrl: httpUrl().nullish(),
   description: z.string().max(2000).nullish(),
   type: z.enum(['new_api', 'sub2api', 'one_api', 'custom']),
   rechargeRatio: z.number().positive().max(1000),
@@ -50,8 +53,9 @@ const channelInputSchema = z.object({
   description: z.string().max(1000).nullish(),
   vendorSlug: z.string().max(50).nullish(),
   protocol: z.enum(['openai_chat', 'openai_responses', 'anthropic', 'gemini']),
-  baseUrl: z.string().url().max(500),
-  apiKey: z.string().min(1).max(500).optional(),
+  baseUrl: httpUrl(),
+  // 更新时 '' 归一为 undefined（契约：留空表示不修改）；创建时仍要求非空
+  apiKey: z.string().max(500).transform((v) => v === '' ? undefined : v).optional(),
   groupRatio: z.number().positive().max(1000),
   billingType: z.enum(['per_token', 'per_request', 'subscription']).optional(),
   primaryModel: z.string().min(1).max(200),
@@ -136,6 +140,19 @@ async function ownSite(db: import('@hub/db').Database, siteId: number, ownerId: 
   return s;
 }
 
+/** raw SQL 的 snake_case 报告行 → reportView 期望的 camelCase 输入 */
+function rawToReport(r: {
+  id: number; channel_id: number; model: string; protocol: string;
+  score: number | null; verdict: string; checks: unknown; duration_ms: number | null;
+  trigger: string; created_at: string;
+}) {
+  return {
+    id: r.id, channelId: r.channel_id, model: r.model, protocol: r.protocol,
+    score: r.score, verdict: r.verdict, checks: r.checks,
+    durationMs: r.duration_ms, trigger: r.trigger, createdAt: new Date(r.created_at),
+  };
+}
+
 async function ownChannel(db: import('@hub/db').Database, channelId: number, ownerId: string) {
   const rows = await db.select({ c: channels, s: sites }).from(channels)
     .innerJoin(sites, eq(channels.siteId, sites.id))
@@ -145,11 +162,6 @@ async function ownChannel(db: import('@hub/db').Database, channelId: number, own
   return row;
 }
 
-async function loadSettings(db: import('@hub/db').Database) {
-  const rows = await db.select().from(settings);
-  // SAFETY: DEFAULT_SETTINGS 全量默认，库中值由管理接口按同一类型写入
-  return { ...DEFAULT_SETTINGS, ...Object.fromEntries(rows.map((r) => [r.key, r.value])) } as unknown as import('@hub/shared').SettingsMap;
-}
 
 export async function merchantRoutes(app: FastifyInstance) {
   const db = app.db;
@@ -246,16 +258,22 @@ export async function merchantRoutes(app: FastifyInstance) {
       ? await db.select().from((await import('@hub/db')).channelStats).where(inArray((await import('@hub/db')).channelStats.channelId, channelIds))
       : [];
     const statsMap = new Map(statsRows.map((r) => [r.channelId, r]));
-    // 每渠道最新一条真伪报告（drizzle 查询，camelCase 行）
-    const reportRows = channelIds.length
-      ? await db.select().from(authenticityReports)
-          .where(inArray(authenticityReports.channelId, channelIds))
-          .orderBy(desc(authenticityReports.createdAt))
-      : [];
-    const reportMap = new Map<number, typeof authenticityReports.$inferSelect>();
-    for (const r of reportRows) {
-      if (!reportMap.has(r.channelId)) reportMap.set(r.channelId, r);
+    // 每渠道最新一条真伪报告：DISTINCT ON 在数据库中取（避免读全量历史到内存）
+    interface RawReport extends Record<string, unknown> {
+      id: number; channel_id: number; channel_model_id: number | null; task_id: number | null;
+      model: string; protocol: string; score: number | null; verdict: string;
+      checks: unknown; duration_ms: number | null; trigger: string; created_at: string;
     }
+    const reportRows = channelIds.length
+      ? await db.execute<RawReport>(sql`
+          SELECT DISTINCT ON (channel_id)
+            id, channel_id, channel_model_id, task_id, model, protocol, score, verdict,
+            checks, duration_ms, trigger, created_at
+          FROM authenticity_reports
+          WHERE channel_id IN (${sql.join(channelIds.map((x) => sql`${x}`), sql`, `)})
+          ORDER BY channel_id, created_at DESC, id DESC`)
+      : [];
+    const reportMap = new Map<number, RawReport>(reportRows.map((r) => [r.channel_id, r]));
 
     const siteStatRow = (await db.select().from(siteStats).where(eq(siteStats.siteId, s.id)).limit(1))[0];
     return {
@@ -266,7 +284,7 @@ export async function merchantRoutes(app: FastifyInstance) {
         s.rechargeRatio,
         modelsMap.get(c.id) ?? [],
         statsMap.get(c.id) ?? null,
-        reportMap.has(c.id) ? reportView(reportMap.get(c.id)!) : null,
+        reportMap.has(c.id) ? reportView(rawToReport(reportMap.get(c.id)!)) : null,
       )),
     };
   });
@@ -313,12 +331,9 @@ export async function merchantRoutes(app: FastifyInstance) {
 
     await db.update(sites).set({ status: 'pending', submittedAt: new Date(), updatedAt: new Date() })
       .where(eq(sites.id, s.id));
-    // 为所有渠道排队真伪检测
+    // 为所有渠道排队真伪检测（原子入队，复用已有活动任务）
     for (const c of chs) {
-      await db.insert(probeTasks).values({
-        channelId: c.id, kind: 'authenticity', trigger: 'onboarding',
-        payload: {}, requestedBy: user.id,
-      });
+      await enqueueProbeTask(db, { channelId: c.id, kind: 'authenticity', trigger: 'onboarding', requestedBy: user.id });
     }
     return { ok: true };
   });
@@ -379,14 +394,19 @@ export async function merchantRoutes(app: FastifyInstance) {
     const { c, s } = await ownChannel(db, id, user.id);
     const input = channelInputSchema.partial().parse(req.body);
 
-    const keyChanged = !!input.apiKey;
+    // Key 真实变化检测：解密旧 Key 比较，避免同 Key 重复入队
+    let keyActuallyChanged = false;
+    if (input.apiKey) {
+      const oldPlain = decryptSecret(c.apiKeyEnc);
+      keyActuallyChanged = input.apiKey !== oldPlain;
+    }
     // 关键配置（影响连接有效性）变化：apiKey/baseUrl/protocol/primaryModel
-    const connectionChanged = keyChanged
+    const connectionChanged = keyActuallyChanged
       || (input.baseUrl !== undefined && input.baseUrl.replace(/\/$/, '') !== c.baseUrl)
       || (input.protocol !== undefined && input.protocol !== c.protocol)
       || (input.primaryModel !== undefined && input.primaryModel !== c.primaryModel);
     // 触发检测任务的关键字段：apiKey/baseUrl/倍率
-    const criticalChanged = keyChanged
+    const criticalChanged = keyActuallyChanged
       || (input.baseUrl !== undefined && input.baseUrl.replace(/\/$/, '') !== c.baseUrl)
       || (input.groupRatio !== undefined && input.groupRatio !== c.groupRatio);
 
@@ -411,11 +431,9 @@ export async function merchantRoutes(app: FastifyInstance) {
       updatedAt: new Date(),
     }).where(eq(channels.id, c.id)).returning();
 
-    // 已上线站点修改关键字段 → 立即触发一次检测任务（SPEC §4.1.6）
+    // 已上线站点修改关键字段 → 原子入队检测任务（复用已有活动任务）
     if (criticalChanged && s.status === 'approved') {
-      await db.insert(probeTasks).values({
-        channelId: c.id, kind: 'authenticity', trigger: 'merchant', payload: {}, requestedBy: user.id,
-      });
+      await enqueueProbeTask(db, { channelId: c.id, kind: 'authenticity', trigger: 'merchant', requestedBy: user.id });
     }
 
     const modelsMap = await loadMerchantChannelModels(db, [c.id]);
@@ -442,12 +460,13 @@ export async function merchantRoutes(app: FastifyInstance) {
     const body = z.object({ model: z.string().max(200).optional() }).parse(req.body ?? {});
     const { c } = await ownChannel(db, id, user.id);
     const model = body.model ?? c.primaryModel;
+    const plainKey = decryptSecret(c.apiKeyEnc);
 
     const probe = await import('@hub/probe');
     let result: ProbeResult;
     try {
       result = await probe.probeAvailability({
-        baseUrl: c.baseUrl, apiKey: decryptSecret(c.apiKeyEnc), protocol: c.protocol, model,
+        baseUrl: c.baseUrl, apiKey: plainKey, protocol: c.protocol, model,
       });
     } catch (err) {
       if (isProbeNotImplemented(err)) throw probeUnavailable();
@@ -459,13 +478,16 @@ export async function merchantRoutes(app: FastifyInstance) {
     await db.insert(probeRuns).values({
       channelId: c.id, channelModelId: cm?.id ?? null, model, protocol: c.protocol,
       kind: 'availability', trigger: 'merchant', success: result.success,
-      httpStatus: result.httpStatus, errorCode: result.errorCode, errorMessage: result.errorMessage,
+      httpStatus: result.httpStatus, errorCode: result.errorCode,
+      // 防御纵深：持久化前用真实 Key 精确替换（上游可能回显 Key）
+      errorMessage: sanitizeKeyFromText(result.errorMessage, plainKey),
       latencyMs: result.latencyMs, ttftMs: result.ttftMs, inputTokens: result.inputTokens,
       outputTokens: result.outputTokens, tokensPerSec: result.tokensPerSec,
     });
     await db.update(channels).set({ lastTestOk: result.success, lastTestAt: new Date() })
       .where(eq(channels.id, c.id));
-    return result;
+    // 返回给站长的 sample 也做 Key 脱敏
+    return { ...result, errorMessage: sanitizeKeyFromText(result.errorMessage, plainKey), sample: sanitizeKeyFromText(result.sample, plainKey) };
   });
 
   // ---------- 获取上游模型列表并回填 ----------
@@ -546,32 +568,20 @@ export async function merchantRoutes(app: FastifyInstance) {
     return map.get(c.id) ?? [];
   });
 
-  // ---------- 手动真伪检测（每渠道每天 ≤ settings.authenticity.merchantDailyLimit 次） ----------
+  // ---------- 手动真伪检测（原子入队，同事务检查每日额度 + 复用活动任务） ----------
   app.post('/api/v1/merchant/channels/:id/authenticity', async (req, reply): Promise<ProbeTask> => {
     const user = await app.requireAuth(req);
     const { id } = idParam.parse(req.params);
     const body = z.object({ models: z.array(z.string().max(200)).max(20).optional() }).parse(req.body ?? {});
     const { c } = await ownChannel(db, id, user.id);
 
-    const settingsMap = await loadSettings(db);
-    const limit = settingsMap['authenticity.merchantDailyLimit'];
-    const todayCount = await db.select({ c: count() }).from(probeTasks)
-      .where(and(
-        eq(probeTasks.channelId, c.id),
-        eq(probeTasks.kind, 'authenticity'),
-        eq(probeTasks.trigger, 'merchant'),
-        sql`${probeTasks.createdAt} > now() - interval '24 hours'`,
-      ));
-    if ((todayCount[0]?.c ?? 0) >= limit) {
-      throw new HttpError(429, 'rate_limited', `每个渠道每天最多发起 ${limit} 次真伪检测`);
-    }
-
-    const [task] = await db.insert(probeTasks).values({
+    const { task, reused } = await enqueueProbeTask(db, {
       channelId: c.id, kind: 'authenticity', trigger: 'merchant',
       payload: { models: body.models }, requestedBy: user.id,
-    }).returning();
-    void reply.status(202);
-    return taskView(task!);
+      checkMerchantDailyLimit: true,
+    });
+    void reply.status(reused ? 200 : 202);
+    return task;
   });
 
   // ---------- 任务状态 ----------

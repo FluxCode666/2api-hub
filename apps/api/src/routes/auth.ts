@@ -5,7 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { eq, sql } from 'drizzle-orm';
-import { users } from '@hub/db';
+import { users, settings } from '@hub/db';
 import type { LoginInput, RegisterInput, SessionUser } from '@hub/shared';
 import { unauthorized, HttpError } from '../lib/errors';
 
@@ -35,6 +35,11 @@ export async function authRoutes(app: FastifyInstance) {
   const db = app.db;
 
   app.post('/api/v1/auth/register', async (req, reply): Promise<SessionUser> => {
+    // 读取 site.allowRegistration 设置
+    const settingRows = await db.select().from(settings).where(eq(settings.key, 'site.allowRegistration')).limit(1);
+    const allowReg = settingRows[0]?.value;
+    if (allowReg === false) throw new HttpError(403, 'registration_closed', '当前未开放注册');
+
     const input = registerSchema.parse(req.body);
     const email = input.email.toLowerCase().trim();
     const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);

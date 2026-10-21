@@ -15,8 +15,10 @@ import type {
 } from '@hub/shared';
 import { DEFAULT_SETTINGS } from '@hub/shared';
 import { badRequest, notFound, HttpError } from '../lib/errors';
+import { httpUrl } from '../lib/url';
 import { iso, probeRunView, reportView, siteStatsView, taskView, vendorRef, channelStatsView } from '../lib/serialize';
 import { loadMerchantChannelModelsFor } from '../lib/merchant-helpers';
+import { enqueueProbeTask } from '../lib/enqueue';
 
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 const pageQuery = z.object({
@@ -242,9 +244,9 @@ export async function adminRoutes(app: FastifyInstance) {
     const input = z.object({
       name: z.string().min(1).max(100).optional(),
       slug: z.string().regex(/^[a-z0-9-]+$/).max(100).optional(),
-      homepageUrl: z.string().url().max(500).optional(),
-      inviteUrl: z.string().url().max(500).nullish(),
-      logoUrl: z.string().url().max(500).nullish(),
+      homepageUrl: httpUrl().optional(),
+      inviteUrl: httpUrl().nullish(),
+      logoUrl: httpUrl().nullish(),
       description: z.string().max(2000).nullish(),
       type: z.enum(['new_api', 'sub2api', 'one_api', 'custom']).optional(),
       rechargeRatio: z.number().positive().max(1000).optional(),
@@ -284,11 +286,11 @@ export async function adminRoutes(app: FastifyInstance) {
       ...(input.paymentMethods !== undefined ? { paymentMethods: input.paymentMethods } : {}),
       updatedAt: new Date(),
     }).where(eq(sites.id, id));
-    // 充值倍率变化影响所有渠道实际倍率 → 排队发现任务刷新
+    // 充值倍率变化影响所有渠道实际倍率 → 原子入队发现任务刷新（复用已有活动任务）
     if (input.rechargeRatio !== undefined && input.rechargeRatio !== s.rechargeRatio) {
       const chs = await db.select({ id: channels.id }).from(channels).where(eq(channels.siteId, id));
       for (const c of chs) {
-        await db.insert(probeTasks).values({ channelId: c.id, kind: 'discovery', trigger: 'admin', payload: {}, requestedBy: admin.id });
+        await enqueueProbeTask(db, { channelId: c.id, kind: 'discovery', trigger: 'admin', requestedBy: admin.id });
       }
     }
     await audit(db, admin, 'site.update', 'site', id, { fields: Object.keys(input) }, req.ip);
@@ -302,11 +304,11 @@ export async function adminRoutes(app: FastifyInstance) {
     const input = z.object({ kind: z.enum(['availability', 'authenticity', 'discovery']) }).parse(req.body);
     const c = (await db.select().from(channels).where(eq(channels.id, id)).limit(1))[0];
     if (!c) throw notFound('渠道不存在');
-    const [task] = await db.insert(probeTasks).values({
-      channelId: c.id, kind: input.kind, trigger: 'admin', payload: {}, requestedBy: admin.id,
-    }).returning();
-    void reply.status(202);
-    return taskView(task!);
+    const { task, reused } = await enqueueProbeTask(db, {
+      channelId: c.id, kind: input.kind, trigger: 'admin', requestedBy: admin.id,
+    });
+    void reply.status(reused ? 200 : 202);
+    return task;
   });
 
   app.patch('/api/v1/admin/channels/:id', async (req) => {
@@ -315,7 +317,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const input = z.object({
       name: z.string().min(1).max(100).optional(),
       description: z.string().max(1000).nullish(),
-      baseUrl: z.string().url().max(500).optional(),
+      baseUrl: httpUrl().optional(),
       apiKey: z.string().min(1).max(500).optional(),
       protocol: z.enum(['openai_chat', 'openai_responses', 'anthropic', 'gemini']).optional(),
       primaryModel: z.string().min(1).max(200).optional(),
@@ -387,8 +389,8 @@ export async function adminRoutes(app: FastifyInstance) {
       name: z.string().min(1).max(100),
       nameZh: z.string().max(100).nullish(),
       color: z.string().max(20).optional(),
-      iconUrl: z.string().url().max(500).nullish(),
-      website: z.string().url().max(500).nullish(),
+      iconUrl: httpUrl().nullish(),
+      website: httpUrl().nullish(),
       description: z.string().max(2000).nullish(),
       sortOrder: z.number().int().optional(),
     } satisfies Record<keyof VendorInput, z.ZodTypeAny>).parse(req.body);
@@ -412,8 +414,8 @@ export async function adminRoutes(app: FastifyInstance) {
       name: z.string().min(1).max(100).optional(),
       nameZh: z.string().max(100).nullish(),
       color: z.string().max(20).optional(),
-      iconUrl: z.string().url().max(500).nullish(),
-      website: z.string().url().max(500).nullish(),
+      iconUrl: httpUrl().nullish(),
+      website: httpUrl().nullish(),
       description: z.string().max(2000).nullish(),
       sortOrder: z.number().int().optional(),
     }).parse(req.body);

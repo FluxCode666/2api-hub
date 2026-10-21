@@ -15,11 +15,10 @@ import {
   consumeStream,
   emptyCapture,
   getAdapter,
-  type BuiltRequest,
   type ProtocolCapture,
   type StreamRequestPayload,
 } from './adapters.js';
-import { checkTokenCount } from './calibration.js';
+import { BENCHMARK_TEXT, checkTokenCountDiff } from './calibration.js';
 import { readBodyLimited, safeFetch } from './http.js';
 import { matchCatalogModelImpl, modelEchoMatches } from './match.js';
 import { judgeQuestion, pickQuestions } from './questions.js';
@@ -33,7 +32,8 @@ import {
   failureResult,
   httpStatusToErrorCode,
   networkErrorToCode,
-  redact,
+  redactDeep,
+  redactWithKey,
 } from './types.js';
 
 export interface UpstreamModelList { ok: boolean; models: string[]; errorCode: string | null; errorMessage: string | null }
@@ -50,8 +50,12 @@ export class ProbeError extends Error {
 export {
   BENCHMARK_TEXT,
   checkTokenCount,
+  checkTokenCountDiff,
+  expectedPureTokens,
   expectedTokenRange,
   O200K_BENCHMARK_TOKENS,
+  TOKEN_COUNT_TOLERANCE,
+  VENDOR_CALIBRATION,
 } from './calibration.js';
 export { matchCatalogModelImpl, modelEchoMatches, normalizeModelName } from './match.js';
 export { judgeQuestion, pickQuestions, QUESTIONS, extractAnswer } from './questions.js';
@@ -129,7 +133,7 @@ async function doStreamCapture(
       const { message } = networkErrorToCode(err, false);
       return {
         capture,
-        result: failureResult(target, httpStatusToErrorCode(res.status), redact(text.slice(0, 300)) ?? message, res.status, startedAt),
+        result: failureResult(target, httpStatusToErrorCode(res.status), redactWithKey(text.slice(0, 300), target.apiKey) ?? message, res.status, startedAt),
         startedAt,
         ttftMs: null,
         sseOk: false,
@@ -155,7 +159,7 @@ async function doStreamCapture(
       inputTokens: capture.inputTokens,
       outputTokens,
       tokensPerSec: tps,
-      sample: capture.text.slice(0, 200) || null,
+      sample: redactWithKey(capture.text.slice(0, 200), target.apiKey) || null,
       at: new Date().toISOString(),
     };
     return { capture, result, startedAt, ttftMs, sseOk, truncated };
@@ -202,7 +206,7 @@ export async function listUpstreamModels(target: Omit<ProbeTarget, 'model'>, opt
       const res = await safeFetch({ url, method: 'GET', headers, timeoutMs, signal: opts?.signal, allowPrivate });
       const { text } = await readBodyLimited(res);
       if (!res.ok) {
-        return { ok: false, models: [], errorCode: httpStatusToErrorCode(res.status), errorMessage: redact(text.slice(0, 200)) };
+        return { ok: false, models: [], errorCode: httpStatusToErrorCode(res.status), errorMessage: redactWithKey(text.slice(0, 200), target.apiKey) };
       }
       let data: unknown;
       try {
@@ -349,16 +353,21 @@ function checkResponseShape(protocol: ChannelProtocol, capture: ProtocolCapture,
   };
 }
 
-function buildTokenCountDetail(
-  tc: { passed: boolean | null; expected: number; range: [number, number]; source: string },
-  actual: number | null,
+function buildTokenCountDiffDetail(
+  tc: { passed: boolean | null; expected: number; range: [number, number]; source: string; diff: number | null },
+  usage1: number | null,
+  usage2: number | null,
 ): string {
-  if (tc.passed === null) return '上游未返回 usage.input_tokens，无法评估';
+  if (tc.passed === null) return '上游未返回 usage.input_tokens，无法评估（差分法需要 1×/2× 两次计数）';
   const rangeStr = `[${tc.range[0]}, ${tc.range[1]}]`;
+  const diffStr = tc.diff !== null ? `差值 ${tc.diff}` : '差值不可用';
   if (tc.passed) {
-    return `input_tokens=${actual} 落在期望区间 ${rangeStr}（期望 ${tc.expected}，${tc.source}）`;
+    return `差分法通过：usage(2×)=${usage2} − usage(1×)=${usage1} → 纯文本 ${tc.diff}，落在期望区间 ${rangeStr}（期望 ${tc.expected}，${tc.source}）`;
   }
-  return `input_tokens=${actual} 偏离期望区间 ${rangeStr}（期望 ${tc.expected}）——疑似换皮模型`;
+  if (tc.diff !== null && tc.diff <= 0) {
+    return `差分法失败：2× 请求计数未增长（${usage1} → ${usage2}），usage 疑似伪造常量`;
+  }
+  return `差分法失败：纯文本 ${tc.diff} 偏离期望区间 ${rangeStr}（期望 ${tc.expected}）——疑似换皮模型`;
 }
 
 /** 知识与身份检查（knowledge，10 分）——弱信号 */
@@ -558,7 +567,7 @@ export async function probeAuthenticity(
     passed: bench.result.success,
     detail: bench.result.success
       ? `连通正常（HTTP ${bench.result.httpStatus}，延迟 ${bench.result.latencyMs ?? '?'}ms）`
-      : `连通失败（${bench.result.errorCode ?? 'unknown'}：${bench.result.errorMessage ?? ''}）`,
+      : `连通失败（${bench.result.errorCode ?? 'unknown'}：${redactWithKey(bench.result.errorMessage, target.apiKey) ?? ''}）`,
   }));
   if (!bench.result.success) {
     // 连通性失败 → 其余检查不执行
@@ -586,27 +595,41 @@ export async function probeAuthenticity(
   // response_shape（15）
   checks.push(makeCheck('response_shape', checkResponseShape(target.protocol, bench.capture, bench.sseOk)));
 
-  // token_count（20）：用 BENCHMARK 文本请求，比较 usage.input_tokens
+  // token_count（20）：差分法——分别发送 1× 与 2× 基准文本，
+  // usage(2×) − usage(1×) = 纯文本 token 数（协议开销相减消除），
+  // 与厂商纯文本期望区间（±8%）比较。可检测组合从 14/56 提升到 26/56。
+  const vendorSlug = hint?.vendorSlug ?? vendor;
   const bench2Payload: StreamRequestPayload = {
     model: target.model,
     messages: [
       { role: 'system', content: 'You are a translation assistant.' },
-      { role: 'user', content: (await import('./calibration.js')).BENCHMARK_TEXT },
+      { role: 'user', content: BENCHMARK_TEXT },
     ],
     maxTokens: 512,
   };
   const bench2 = await doStreamCapture(target, opts, bench2Payload);
   captures.push(bench2.capture);
-  const vendorSlug = hint?.vendorSlug ?? vendor;
-  const tokenCheck = checkTokenCount(vendorSlug, target.protocol, bench2.capture.inputTokens);
+  const bench2xPayload: StreamRequestPayload = {
+    model: target.model,
+    messages: [
+      { role: 'system', content: 'You are a translation assistant.' },
+      { role: 'user', content: `${BENCHMARK_TEXT}\n\n${BENCHMARK_TEXT}` },
+    ],
+    maxTokens: 512,
+  };
+  const bench2x = await doStreamCapture(target, opts, bench2xPayload);
+  captures.push(bench2x.capture);
+  const tokenCheckDiff = checkTokenCountDiff(vendorSlug, bench2.capture.inputTokens, bench2x.capture.inputTokens);
   checks.push(makeCheck('token_count', {
-    passed: tokenCheck.passed,
-    detail: buildTokenCountDetail(tokenCheck, bench2.capture.inputTokens),
+    passed: tokenCheckDiff.passed,
+    detail: buildTokenCountDiffDetail(tokenCheckDiff, bench2.capture.inputTokens, bench2x.capture.inputTokens),
     evidence: {
-      actual: bench2.capture.inputTokens,
-      expected: tokenCheck.expected,
-      range: tokenCheck.range,
-      source: tokenCheck.source,
+      usage1x: bench2.capture.inputTokens,
+      usage2x: bench2x.capture.inputTokens,
+      diff: tokenCheckDiff.diff,
+      expected: tokenCheckDiff.expected,
+      range: tokenCheckDiff.range,
+      source: tokenCheckDiff.source,
     },
   }));
 
@@ -647,14 +670,17 @@ export async function probeAuthenticity(
   const score = executedWeight > 0 ? Math.round((passedWeight / executedWeight) * 100) : 0;
   const verdict: TrustVerdict = verdictFromScore(score, executedWeight);
 
-  return {
+  // P1 修复：报告出口按真实 apiKey 深度脱敏（check.detail / evidence 中
+  // 可能嵌有上游回显的错误原文，含自定义格式 Key）
+  const report: AuthenticityResult = {
     model: target.model,
     protocol: target.protocol,
     score,
     verdict,
-    checks,
+    checks: redactDeep(checks, target.apiKey),
     durationMs: Date.now() - startedAll,
   };
+  return report;
 }
 
 // ---------------------------------------------------------------------------

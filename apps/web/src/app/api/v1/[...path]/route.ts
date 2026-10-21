@@ -6,9 +6,8 @@ import { MockError } from '@/lib/mock/error';
 
 export const dynamic = 'force-dynamic';
 
-function invalidatePublicData(request: NextRequest, response: Response): void {
+function invalidatePublicData(request: NextRequest, response: Response, path: string): void {
   if (!response.ok || ['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return;
-  const path = request.nextUrl.pathname.replace(/^\/api\/v1/, '');
   const affectsPublicData = /^\/merchant\/(sites|channels)(?:\/|$)/.test(path)
     || /^\/admin\/(sites|channels|vendors|models|reviews|announcements|settings)(?:\/|$)/.test(path)
     || /^\/sites\/[^/]+\/reviews$/.test(path)
@@ -19,9 +18,9 @@ function invalidatePublicData(request: NextRequest, response: Response): void {
   revalidatePath('/sitemap.xml');
 }
 
-async function proxy(request: NextRequest): Promise<Response> {
+async function proxy(request: NextRequest, path: string): Promise<Response> {
   const origin = (process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:8711').replace(/\/$/, '');
-  const target = new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, origin);
+  const target = new URL(`/api/v1${path}${request.nextUrl.search}`, origin);
   const headers = new Headers(request.headers);
   for (const name of ['host', 'connection', 'content-length', 'transfer-encoding']) headers.delete(name);
   try {
@@ -35,15 +34,17 @@ async function proxy(request: NextRequest): Promise<Response> {
     responseHeaders.delete('set-cookie');
     for (const cookie of upstream.headers.getSetCookie()) responseHeaders.append('set-cookie', cookie);
     const response = new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
-    invalidatePublicData(request, response);
+    invalidatePublicData(request, response, path);
     return response;
   } catch {
     return NextResponse.json({ error: { code: 'upstream_unavailable', message: '暂时无法连接 API 服务，请稍后重试。' } } satisfies ApiError, { status: 502 });
   }
 }
 
-async function handler(request: NextRequest): Promise<Response> {
-  if (process.env.HUB_MOCK !== '1') return proxy(request);
+async function handler(request: NextRequest, context: { params: Promise<{ path: string[] }> }): Promise<Response> {
+  // 内部 rewrite 保留原始 URL；从匹配参数构造真实 API 路径。
+  const path = `/${(await context.params).path.map(encodeURIComponent).join('/')}`;
+  if (process.env.HUB_MOCK !== '1') return proxy(request, path);
   try {
     let body: unknown;
     if (!['GET', 'HEAD'].includes(request.method)) {
@@ -53,7 +54,6 @@ async function handler(request: NextRequest): Promise<Response> {
         catch { throw new MockError(400, 'invalid_json', '请求内容不是有效的 JSON。'); }
       }
     }
-    const path = request.nextUrl.pathname.replace(/^\/api\/v1/, '');
     const data = await mockRequest(`${path}${request.nextUrl.search}`, request.method, body, mockSession(request.headers.get('cookie') ?? ''));
     if (data === undefined) throw new MockError(404, 'not_found', '没有找到该接口。');
     if (request.method === 'GET' && path.startsWith('/go/')) {
@@ -66,7 +66,7 @@ async function handler(request: NextRequest): Promise<Response> {
     if (request.method === 'POST' && path === '/auth/logout') {
       response.cookies.set('hub_session', '', { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 0 });
     }
-    invalidatePublicData(request, response);
+    invalidatePublicData(request, response, path);
     return response;
   } catch (error) {
     if (error instanceof MockError) return NextResponse.json({ error: { code: error.code, message: error.message } } satisfies ApiError, { status: error.status });

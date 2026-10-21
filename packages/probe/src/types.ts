@@ -64,7 +64,7 @@ export function failureResult(
     protocol: target.protocol,
     httpStatus,
     errorCode,
-    errorMessage: redact(errorMessage),
+    errorMessage: redactWithKey(errorMessage, target.apiKey),
     latencyMs: Date.now() - startedAt,
     ttftMs: null,
     inputTokens: null,
@@ -75,7 +75,7 @@ export function failureResult(
   };
 }
 
-/** 从文本中抹掉疑似 API Key 的片段 */
+/** 通用格式脱敏（无真实 Key 时兑底）：常见 Key 形态 + 凭据头 */
 export function redact(text: string | null): string | null {
   if (!text) return text;
   return text
@@ -83,6 +83,66 @@ export function redact(text: string | null): string | null {
     .replace(/Bearer\s+[A-Za-z0-9._-]{8,}/gi, 'Bearer ****')
     .replace(/AIza[A-Za-z0-9_-]{10,}/g, 'AIza****')
     .replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g, '****');
+}
+
+/**
+ * 按真实 Key 精确脱敏（P1 修复）：在 probe 边界用实际 apiKey 及其常见变体
+ * 对所有对外输出做替换。变体覆盖：原样、URL 编码、URL 查询编码、base64、
+ * base64url、JSON 字符串转义。Key 过短（<8 字符）时不生效（避免误伤普通词）。
+ * 兑底再叠一层 redact() 的格式匹配。
+ */
+export function redactWithKey(text: string | null, apiKey: string | undefined | null): string | null {
+  if (!text) return text;
+  let out = text;
+  if (apiKey && apiKey.length >= 8) {
+    const variants = new Set<string>([apiKey]);
+    try {
+      variants.add(encodeURIComponent(apiKey));
+      variants.add(encodeURI(apiKey));
+    } catch {
+      // ignore
+    }
+    try {
+      variants.add(Buffer.from(apiKey, 'utf8').toString('base64'));
+      variants.add(Buffer.from(apiKey, 'utf8').toString('base64url'));
+    } catch {
+      // ignore
+    }
+    try {
+      variants.add(JSON.stringify(apiKey).slice(1, -1)); // 字符串内部的转义形式
+    } catch {
+      // ignore
+    }
+    // 长变体优先替换，避免短变体先匹配破坏长变体
+    for (const v of [...variants].sort((a, b) => b.length - a.length)) {
+      if (v.length >= 8) {
+        out = out.split(v).join('[REDACTED]');
+      }
+    }
+    // Key 本体可能出现在 Authorization/x-api-key 头附近的原文里已被上面覆盖；
+    // 若 Key 含正则特殊字符，split/join 也是字面量替换，安全。
+  }
+  return redact(out);
+}
+
+/** 深度遍历对象，对其中的所有字符串做按真实 Key 的精确脱敏（evidence 等嵌套结构） */
+export function redactDeep<T>(value: T, apiKey: string | undefined | null): T {
+  if (typeof value === 'string') {
+    // SAFETY: redactWithKey 只改字符串内容不改类型，断言仅为还原泛型 T（运行时形状未变）
+    return redactWithKey(value, apiKey) as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    // SAFETY: map 只替换字符串叶子，数组长度与元素结构不变，断言仅为还原泛型 T
+    return value.map((v) => redactDeep(v, apiKey)) as unknown as T;
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = redactDeep(v, apiKey);
+    }
+    return out as T;
+  }
+  return value;
 }
 
 export function emptyProbeResult(): ProbeResult {

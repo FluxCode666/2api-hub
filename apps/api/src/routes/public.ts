@@ -15,6 +15,7 @@ import type {
 } from '@hub/shared';
 import { DEFAULT_SETTINGS } from '@hub/shared';
 import { badRequest, notFound, probeUnavailable, isProbeNotImplemented, HttpError } from '../lib/errors';
+import { httpUrl } from '../lib/url';
 import { ipHash, iso, siteStatsView, vendorRef } from '../lib/serialize';
 import { queryChannels } from '../lib/channelList';
 import { siteListQuery, reviewDistribution } from '../lib/sites';
@@ -23,6 +24,11 @@ const pageQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+// /verify 并发控制（进程内）
+const VERIFY_GLOBAL_CONCURRENCY = 4;
+let verifyInFlight = 0;
+const verifyIpInFlight = new Set<string>();
 
 /** 显式布尔 query 解析：只接受 'true'/'1' 与 'false'/'0'，其余视为 undefined（z.coerce.boolean 会把 'false' 转成 true） */
 const boolQuery = z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1').optional();
@@ -236,69 +242,102 @@ export async function publicRoutes(app: FastifyInstance) {
     }));
   });
 
-  // ---------- /verify 公开鉴定（IP 限频） ----------
+  // ---------- /verify 公开鉴定（IP 限频 + 原子预留额度 + 并发上限） ----------
   app.post('/api/v1/verify', async (req, reply): Promise<AuthenticityReport> => {
     const input = z.object({
-      baseUrl: z.string().url().max(500),
+      baseUrl: httpUrl(),
       apiKey: z.string().min(1).max(500),
       model: z.string().min(1).max(200),
       protocol: z.enum(['openai_chat', 'openai_responses', 'anthropic', 'gemini']),
     } satisfies Record<keyof VerifyRequest, z.ZodTypeAny>).parse(req.body);
 
-    // 限频：同 IP 每小时 ≤ settings.verify.hourlyLimitPerIp
+    // 全局并发上限（内存计数，进程内有效）
+    if (verifyInFlight >= VERIFY_GLOBAL_CONCURRENCY) {
+      throw new HttpError(429, 'rate_limited', '鉴定服务繁忙，请稍后再试');
+    }
+
     const rows = await db.select().from(settings);
     // SAFETY: DEFAULT_SETTINGS 全量默认，库中覆盖值由管理接口按同一类型写入
     const settingsMap = { ...DEFAULT_SETTINGS, ...Object.fromEntries(rows.map((r) => [r.key, r.value])) } as unknown as SettingsMap;
     const limit = settingsMap['verify.hourlyLimitPerIp'];
     const hash = ipHash(req.ip);
-    const recent = await db.select({ c: count() }).from(verifyRequests)
-      .where(and(eq(verifyRequests.ipHash, hash), sql`${verifyRequests.createdAt} > now() - interval '1 hour'`));
-    if ((recent[0]?.c ?? 0) >= limit) {
-      throw new HttpError(429, 'rate_limited', `鉴定请求过于频繁，每小时最多 ${limit} 次`);
-    }
 
-    const probe = await import('@hub/probe');
-    // 目录匹配提示
-    const catalog = await db.select({ id: models.id, slug: models.slug, aliases: models.aliases }).from(models).where(eq(models.isActive, true));
-    const matchedId = probe.matchCatalogModel(input.model, catalog);
-    let hint = null;
-    if (matchedId !== null) {
-      const m = (await db.select().from(models).where(eq(models.id, matchedId)).limit(1))[0];
-      if (m) {
-        const v = (await db.select().from(vendors).where(eq(vendors.id, m.vendorId)).limit(1))[0];
-        hint = { slug: m.slug, vendorSlug: v?.slug ?? '', tier: m.tier, knowledgeCutoff: m.knowledgeCutoff, expectedTps: m.expectedTps };
-      }
-    }
-
-    let result;
-    try {
-      result = await probe.probeAuthenticity(
-        { baseUrl: input.baseUrl, apiKey: input.apiKey, protocol: input.protocol, model: input.model },
-        hint,
-        { quick: true, timeoutMs: 60000 },
-      );
-    } catch (err) {
-      if (isProbeNotImplemented(err)) throw probeUnavailable();
-      if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'ssrf_blocked') {
-        throw badRequest('目标地址不安全（禁止探测私网/保留地址）');
-      }
-      throw err;
-    }
-
-    // 只存 host/模型/得分，绝不落 Key
+    // 原子预留额度：事务内先插入 pending 记录再计数（覆盖执行中的请求）
     let host: string;
     try {
       host = new URL(input.baseUrl).host;
     } catch {
       throw badRequest('baseUrl 不是合法 URL');
     }
-    await db.insert(verifyRequests).values({
-      ipHash: hash, host, model: input.model, protocol: input.protocol,
-      score: result.score, verdict: result.verdict,
+    const reservation = await db.transaction(async (tx) => {
+      // 先插入占位记录（score=null verdict=unknown 表示执行中/未完成）
+      const [row] = await tx.insert(verifyRequests).values({
+        ipHash: hash, host, model: input.model, protocol: input.protocol,
+        score: null, verdict: 'unknown',
+      }).returning({ id: verifyRequests.id });
+      // 同事务内计数（含刚插入的这条）
+      const recent = await tx.select({ c: count() }).from(verifyRequests)
+        .where(and(eq(verifyRequests.ipHash, hash), sql`${verifyRequests.createdAt} > now() - interval '1 hour'`));
+      if ((recent[0]?.c ?? 0) > limit) {
+        // 超出额度：回滚（抛错触发 rollback），不预留
+        throw new HttpError(429, 'rate_limited', `鉴定请求过于频繁，每小时最多 ${limit} 次`);
+      }
+      return row!;
     });
 
-    void reply.header('cache-control', 'no-store');
-    return { ...result, id: null, channelId: null, trigger: 'public', createdAt: new Date().toISOString() };
+    // 单 IP 并发上限 1：同一 ipHash 同时只允许一个执行中的鉴定
+    if (verifyIpInFlight.has(hash)) {
+      // 退还预留的记录
+      await db.delete(verifyRequests).where(eq(verifyRequests.id, reservation.id));
+      throw new HttpError(429, 'rate_limited', '同一 IP 同时只能执行一次鉴定');
+    }
+
+    verifyInFlight++;
+    verifyIpInFlight.add(hash);
+
+    try {
+      const probe = await import('@hub/probe');
+      // 目录匹配提示
+      const catalog = await db.select({ id: models.id, slug: models.slug, aliases: models.aliases }).from(models).where(eq(models.isActive, true));
+      const matchedId = probe.matchCatalogModel(input.model, catalog);
+      let hint = null;
+      if (matchedId !== null) {
+        const m = (await db.select().from(models).where(eq(models.id, matchedId)).limit(1))[0];
+        if (m) {
+          const v = (await db.select().from(vendors).where(eq(vendors.id, m.vendorId)).limit(1))[0];
+          hint = { slug: m.slug, vendorSlug: v?.slug ?? '', tier: m.tier, knowledgeCutoff: m.knowledgeCutoff, expectedTps: m.expectedTps };
+        }
+      }
+
+      let result;
+      try {
+        result = await probe.probeAuthenticity(
+          { baseUrl: input.baseUrl, apiKey: input.apiKey, protocol: input.protocol, model: input.model },
+          hint,
+          { quick: true, timeoutMs: 60000 },
+        );
+      } catch (err) {
+        if (isProbeNotImplemented(err)) throw probeUnavailable();
+        if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'ssrf_blocked') {
+          throw badRequest('目标地址不安全（禁止探测私网/保留地址）');
+        }
+        throw err;
+      }
+
+      // 回填预留记录的真实结果
+      await db.update(verifyRequests).set({ score: result.score, verdict: result.verdict })
+        .where(eq(verifyRequests.id, reservation.id));
+
+      void reply.header('cache-control', 'no-store');
+      return { ...result, id: null, channelId: null, trigger: 'public', createdAt: new Date().toISOString() };
+    } catch (err) {
+      // 失败退还预留额度（删除占位记录）
+      await db.delete(verifyRequests).where(eq(verifyRequests.id, reservation.id)).catch(() => {});
+      throw err;
+    } finally {
+      verifyInFlight--;
+      verifyIpInFlight.delete(hash);
+    }
   });
 
   // ---------- /feedback ----------
@@ -344,7 +383,16 @@ export async function publicRoutes(app: FastifyInstance) {
     // 记录点击（异步，不阻塞跳转）
     void db.execute(sql`UPDATE sites SET click_count = click_count + 1 WHERE id = ${r.siteId}`);
     void db.execute(sql`UPDATE channels SET click_count = click_count + 1 WHERE id = ${channelId}`);
-    const target = r.inviteUrl ?? r.homepageUrl;
+    // 跳转目标只允许 http/https（防御 javascript: 等危险协议）
+    const rawTarget = r.inviteUrl ?? r.homepageUrl;
+    let target: string;
+    try {
+      const u = new URL(rawTarget);
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('bad protocol');
+      target = rawTarget;
+    } catch {
+      throw notFound('渠道跳转链接不可用');
+    }
     return reply.status(302).header('location', target).send();
   });
 }

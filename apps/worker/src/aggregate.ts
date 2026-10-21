@@ -1,6 +1,8 @@
 /*
  * 统计聚合（SPEC §5.5）：从 probe_runs 计算 channel_stats / site_stats。
  * 全部用 SQL 聚合（percentile_cont 等），不把 probe_runs 全量读进内存。
+ * 注意：db.execute 的 raw 参数中 postgres.js 不序列化 Date 对象，
+ * 因此所有时间参数一律传 ISO 字符串并显式 ::timestamptz。
  */
 import { sql } from 'drizzle-orm';
 import { computeRecommendScore } from '@hub/shared';
@@ -20,8 +22,8 @@ export interface AggregateResult {
   durationMs: number;
 }
 
-/** percentile_cont 需要的行类型（db.execute 要求 Record 索引签名） */
-interface AggRow extends Record<string, unknown> {
+/** db.execute 的行类型（要求 Record 索引签名；时间列为 ISO 字符串） */
+export interface AggRow extends Record<string, unknown> {
   channel_id: number;
   uptime_1h: string | null;
   uptime_24h: string | null;
@@ -31,15 +33,15 @@ interface AggRow extends Record<string, unknown> {
   latency_p95: number | null;
   ttft_avg: number | null;
   consecutive_failures: number;
-  last_success_at: string | Date | null;
-  last_failure_at: string | Date | null;
-  last_probe_at: string | Date | null;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  last_probe_at: string | null;
   trust_score: number | null;
   trust_verdict: TrustVerdict | null;
   sparkline: { t: string; ok: boolean; ms: number | null }[] | null;
 }
 
-interface SiteAggRow extends Record<string, unknown> {
+export interface SiteAggRow extends Record<string, unknown> {
   site_id: number;
   channel_count: number;
   model_count: number;
@@ -57,19 +59,20 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-const iso = (v: string | Date | null | undefined): string | null => {
-  if (!v) return null;
-  return v instanceof Date ? v.toISOString() : new Date(v).toISOString();
-};
+const round = (v: number | null, digits = 4): number | null =>
+  v === null ? null : Math.round(v * 10 ** digits) / 10 ** digits;
 
-const toDate = (v: string | Date | null): Date | null => {
-  if (!v) return null;
-  return v instanceof Date ? v : new Date(v);
+/** SQL 返回的时间列统一转 ISO 字符串（或 null） */
+const isoOrNull = (v: unknown): string | null => {
+  if (v === null || v === undefined) return null;
+  if (v instanceof Date) return v.toISOString();
+  const d = new Date(String(v));
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 };
 
 /**
- * 单渠道聚合（导出供单元测试）：
- * 输入 SQL 聚合出的原始行，计算 recommend_score 并返回 upsert 值。
+ * 单渠道聚合（导出供单元测试）：输入 SQL 聚合出的原始行，
+ * 用 computeRecommendScore 计算推荐分，返回 upsert 所需字段。
  */
 export function buildChannelStat(
   r: AggRow,
@@ -80,17 +83,15 @@ export function buildChannelStat(
   const trustScore = num(r.trust_score);
   const recommendScore = computeRecommendScore({
     uptime24h,
-    latencyP50: latencyP50 === null ? null : Math.round(latencyP50),
-    trustScore: trustScore === null ? null : Math.round(trustScore),
+    latencyP50,
+    trustScore,
     consecutiveFailures: r.consecutive_failures,
     samples24h: r.samples_24h,
     weights: opts.weights,
   });
   const sparkline: SparkPoint[] = Array.isArray(r.sparkline)
-    ? r.sparkline.map((p) => ({ t: String(p.t), ok: Boolean(p.ok), ms: num(p.ms) }))
+    ? r.sparkline.map((p) => ({ t: isoOrNull(p.t) ?? '', ok: Boolean(p.ok), ms: num(p.ms) }))
     : [];
-  const round = (v: number | null, digits = 4): number | null =>
-    v === null ? null : Math.round(v * 10 ** digits) / 10 ** digits;
   return {
     channelId: r.channel_id,
     uptime1h: round(num(r.uptime_1h)),
@@ -101,14 +102,13 @@ export function buildChannelStat(
     latencyP95_24h: r.latency_p95 === null ? null : Math.round(r.latency_p95),
     ttftAvg24h: r.ttft_avg === null ? null : Math.round(r.ttft_avg),
     consecutiveFailures: r.consecutive_failures,
-    lastSuccessAt: toDate(r.last_success_at),
-    lastFailureAt: toDate(r.last_failure_at),
-    lastProbeAt: toDate(r.last_probe_at),
+    lastSuccessAt: isoOrNull(r.last_success_at),
+    lastFailureAt: isoOrNull(r.last_failure_at),
+    lastProbeAt: isoOrNull(r.last_probe_at),
     trustScore: trustScore === null ? null : Math.round(trustScore),
     trustVerdict: (r.trust_verdict ?? 'unknown') as TrustVerdict,
     recommendScore,
     sparkline,
-    updatedAt: new Date(),
   };
 }
 
@@ -125,19 +125,20 @@ const CHANNEL_AGG_SQL = sql`
   agg AS (
     SELECT
       r.channel_id,
-      AVG(CASE WHEN r.created_at > now() - interval '1 hour' THEN CASE WHEN r.success THEN 1.0 ELSE 0 END END) AS uptime_1h,
-      AVG(CASE WHEN r.created_at > now() - interval '24 hours' THEN CASE WHEN r.success THEN 1.0 ELSE 0 END END) AS uptime_24h,
-      AVG(CASE WHEN r.created_at > now() - interval '7 days' THEN CASE WHEN r.success THEN 1.0 ELSE 0 END END) AS uptime_7d,
+      AVG(CASE WHEN r.created_at > now() - interval '1 hour' THEN CASE WHEN r.success THEN 1.0 ELSE 0 END END)::float8 AS uptime_1h,
+      AVG(CASE WHEN r.created_at > now() - interval '24 hours' THEN CASE WHEN r.success THEN 1.0 ELSE 0 END END)::float8 AS uptime_24h,
+      AVG(CASE WHEN r.created_at > now() - interval '7 days' THEN CASE WHEN r.success THEN 1.0 ELSE 0 END END)::float8 AS uptime_7d,
       COUNT(*) FILTER (WHERE r.created_at > now() - interval '24 hours')::int AS samples_24h,
-      percentile_cont(0.5) WITHIN GROUP (ORDER BY r.latency_ms) FILTER (WHERE r.success AND r.created_at > now() - interval '24 hours') AS latency_p50,
-      percentile_cont(0.95) WITHIN GROUP (ORDER BY r.latency_ms) FILTER (WHERE r.success AND r.created_at > now() - interval '24 hours') AS latency_p95,
-      AVG(r.ttft_ms) FILTER (WHERE r.success AND r.created_at > now() - interval '24 hours') AS ttft_avg,
+      (percentile_cont(0.5) WITHIN GROUP (ORDER BY r.latency_ms) FILTER (WHERE r.success AND r.created_at > now() - interval '24 hours'))::int AS latency_p50,
+      (percentile_cont(0.95) WITHIN GROUP (ORDER BY r.latency_ms) FILTER (WHERE r.success AND r.created_at > now() - interval '24 hours'))::int AS latency_p95,
+      (AVG(r.ttft_ms) FILTER (WHERE r.success AND r.created_at > now() - interval '24 hours'))::int AS ttft_avg,
       MAX(r.created_at) FILTER (WHERE r.success) AS last_success_at,
       MAX(r.created_at) FILTER (WHERE NOT r.success) AS last_failure_at,
       MAX(r.created_at) AS last_probe_at,
       (
         SELECT COALESCE(json_agg(x ORDER BY x.t DESC), '[]'::json) FROM (
-          SELECT r2.created_at AS t, r2.success AS ok, r2.latency_ms AS ms
+          SELECT to_char(r2.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS t,
+                 r2.success AS ok, r2.latency_ms AS ms
           FROM probe_runs r2
           WHERE r2.channel_id = r.channel_id AND r2.kind = 'availability'
           ORDER BY r2.created_at DESC
@@ -149,7 +150,7 @@ const CHANNEL_AGG_SQL = sql`
     GROUP BY r.channel_id
   ),
   cf AS (
-    -- 连续失败次数：从最近一次成功（或全部）往前数连续失败
+    -- 连续失败次数：最近一次成功之后的全部失败（无成功则全表失败数）
     SELECT r.channel_id,
       COUNT(*)::int AS consecutive_failures
     FROM probe_runs r
@@ -205,7 +206,7 @@ const SITE_AGG_SQL = sql`
 export async function runAggregation(db: Database, opts: AggregateOptions): Promise<AggregateResult> {
   const startedAt = Date.now();
 
-  // ---- channel_stats ----
+  // ---- channel_stats：SQL 聚合 + JS 算推荐分后逐行 upsert ----
   const rows = await db.execute<AggRow>(CHANNEL_AGG_SQL);
   let channelCount = 0;
   for (const r of rows) {
@@ -217,7 +218,8 @@ export async function runAggregation(db: Database, opts: AggregateOptions): Prom
         recommend_score, sparkline, updated_at)
       VALUES (${stat.channelId}, ${stat.uptime1h}, ${stat.uptime24h}, ${stat.uptime7d}, ${stat.samples24h},
         ${stat.latencyP50_24h}, ${stat.latencyP95_24h}, ${stat.ttftAvg24h}, ${stat.consecutiveFailures},
-        ${stat.lastSuccessAt}, ${stat.lastFailureAt}, ${stat.lastProbeAt}, ${stat.trustScore}, ${stat.trustVerdict},
+        ${stat.lastSuccessAt}::timestamptz, ${stat.lastFailureAt}::timestamptz, ${stat.lastProbeAt}::timestamptz,
+        ${stat.trustScore}, ${stat.trustVerdict},
         ${stat.recommendScore}, ${JSON.stringify(stat.sparkline)}::jsonb, now())
       ON CONFLICT (channel_id) DO UPDATE SET
         uptime_1h = EXCLUDED.uptime_1h, uptime_24h = EXCLUDED.uptime_24h, uptime_7d = EXCLUDED.uptime_7d,
@@ -240,14 +242,14 @@ export async function runAggregation(db: Database, opts: AggregateOptions): Prom
     const bestRecommend = num(r.best_recommend);
     const minRatio = num(r.min_actual_ratio);
     const avgRating = num(r.avg_rating);
-    const round = (v: number | null, digits = 4): number | null =>
-      v === null ? null : Math.round(v * 10 ** digits) / 10 ** digits;
     await db.execute(sql`
       INSERT INTO site_stats (site_id, channel_count, model_count, avg_uptime_24h,
         best_recommend_score, min_actual_ratio, vendor_slugs, review_count, avg_rating, updated_at)
       VALUES (${r.site_id}, ${r.channel_count}, ${r.model_count}, ${round(avgUptime)},
         ${bestRecommend === null ? null : Math.round(bestRecommend * 10) / 10}, ${round(minRatio)},
-        ${r.vendor_slugs ?? []}, ${r.review_count}, ${round(avgRating, 2)}, now())
+        ${sql.raw(
+          `ARRAY[${(r.vendor_slugs ?? []).map((slug) => `'${slug.replace(/'/g, "''")}'`).join(',')}]::text[]`,
+        )}, ${r.review_count}, ${round(avgRating, 2)}, now())
       ON CONFLICT (site_id) DO UPDATE SET
         channel_count = EXCLUDED.channel_count, model_count = EXCLUDED.model_count,
         avg_uptime_24h = EXCLUDED.avg_uptime_24h, best_recommend_score = EXCLUDED.best_recommend_score,
@@ -266,5 +268,3 @@ export async function runAggregation(db: Database, opts: AggregateOptions): Prom
   }
   return { channelStats: channelCount, siteStats: siteCount, durationMs };
 }
-
-export { iso };

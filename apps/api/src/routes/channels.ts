@@ -72,8 +72,9 @@ export async function channelRoutes(app: FastifyInstance) {
     const { c, s } = row;
 
     const user = await app.optionalUser(req);
-    const { items } = await queryChannels(db, { siteId: s.id, page: 1, pageSize: 100 }, user?.id);
-    const listItem = items.find((it) => it.id === id);
+    // 直接按 id 查询榜单行（不依赖站点前 N 名列表，超过 N 个渠道时也能返回）
+    const { items } = await queryChannels(db, { ids: [id], page: 1, pageSize: 1 }, user?.id);
+    const listItem = items[0];
     if (!listItem) throw notFound('渠道不存在或已下线');
 
     // 模型列表（含价格）

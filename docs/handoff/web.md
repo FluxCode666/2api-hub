@@ -2,7 +2,7 @@
 
 ## 状态
 
-公开站、站长工作台和管理后台已实现。Mock 验收已完成，Web 已切换默认真实 API 模式；真实模式 39 个页面和 3 项游客跳转均通过。连接成功、实际鉴定与任务完成路径仍等待 mock-upstream/worker，不能将 Mock 结果视为真实检测验收。
+公开站、站长工作台和管理后台已实现。Mock 验收已完成，Web 默认连接真实 API；真实模式 39 个页面和 3 项游客跳转均通过。真实连接测试、模型发现、提交审核和公开鉴定已通过；检测任务终态与审核后统计仍等待 worker，不能将 Mock 结果视为真实任务验收。
 
 ## 运行
 
@@ -24,6 +24,23 @@ Next 配置读取根目录 `.env`；`API_INTERNAL_URL` 决定 SSR 和同源代�
 
 Mock 账号：管理员 `admin@2api.hub / admin123456`、站长 `merchant@2api.hub / merchant123456`、用户 `user@2api.hub / user123456`。Mock 变更保存在当前 Node 进程，重启后恢复 fixture。API Key 只返回掩码；公开鉴定在演示模式明确标记模拟报告。
 
+## Standalone 与 Docker
+
+`next.config.ts` 已启用 `output: 'standalone'`，`outputFileTracingRoot` 指向仓库根目录。普通真实 API 构建通过，保留首页 60 秒、目录 300 秒 ISR。手动启动时先复制静态资源，再从 standalone 根运行：
+
+```bash
+cp -R apps/web/.next/static apps/web/.next/standalone/apps/web/.next/
+cp -R apps/web/public apps/web/.next/standalone/apps/web/
+cd apps/web/.next/standalone
+PORT=3210 HOSTNAME=0.0.0.0 API_INTERNAL_URL=http://127.0.0.1:8711 node apps/web/server.js
+```
+
+`apps/web/Dockerfile` 已实际构建并运行验证。三条 COPY 分别放置 standalone 根、`apps/web/.next/static`、`apps/web/public`；OG 字体随 public 复制到 `apps/web/public/fonts/og`，页面字体随 static 复制。`Dockerfile.dockerignore` 排除 `.env*`、依赖、构建缓存和验收截图。镜像设置 `PORT=3210`、`HOSTNAME=0.0.0.0`。
+
+镜像构建 RUN 仅临时设置 `HUB_SKIP_API_PRERENDER=1`，让请求 API 的页面跳过构建期预渲染；未使用 Mock。已用不可达的 `API_INTERNAL_URL=http://127.0.0.1:9` 完成构建。该开关不会写入 runner 环境，运行时仍使用 60/300 秒公共 Data Cache；普通 `pnpm build` 不设置该开关。`HUB_SITE_URL` 由 compose 同时传给 build arg 和运行环境，用于静态 canonical/robots 和动态 metadata。
+
+镜像实际使用运行时 `API_INTERNAL_URL=http://host.docker.internal:8711` 验收，确认没有依赖构建时的 localhost：42 项页面/权限检查、25 项 SEO 检查均通过，三类 OG 图为 1200×630 PNG。原生 standalone 与 Docker 合计 38 项 JS/CSS/字体、Cookie 登录和 `/go` 302 检查通过。内部 rewrite 的 Route Handler 从匹配参数构造 API 路径，兼容 Next 保留原始请求 URL 的行为。结果为 `artifacts/standalone-checks.json`、`docker-route-checks.json`、`docker-seo-checks.json`；浏览器截图 `home-standalone-desktop.png`，无运行错误。
+
 ## 已完成页面与功能
 
 - 公开站：`/`、`/rankings`、`/models`、`/models/[slug]`、`/vendors`、`/vendors/[slug]`、`/sites`、`/sites/[slug]`、`/channels/[id]`、`/compare`、`/verify`、`/join`、`/guide`、`/login`、`/register`、`/me`。
@@ -33,7 +50,7 @@ Mock 账号：管理员 `admin@2api.hub / admin123456`、站长 `merchant@2api.h
 - 用户：Cookie 登录注册、通知已读、站点评价、个人评价分页与删除、反馈。
 - 权限：游客访问 `/merchant`、`/admin`、`/me` 跳转登录并保留目标地址；普通用户访问管理页显示 403，且不请求管理数据。
 
-所有接口 DTO 直接引用 `@hub/shared`。客户端使用同源 `/api/v1`，服务端直接访问内部 API 并透传 Cookie；前端不保存登录 Token。`/api/v1/[...path]` 在 Mock 模式处理 fixture，真实模式透明代理状态、内容与 Set-Cookie；`/go/:id` 使用 Next rewrite。
+所有接口 DTO 直接引用 `@hub/shared`。客户端使用同源 `/api/v1`，服务端直接访问内部 API 并透传 Cookie；前端不保存登录 Token。`/api/v1/[...path]` 在 Mock 模式处理 fixture，真实模式透明代理状态、内容与 Set-Cookie；`/go/:id` 内部 rewrite 到 `/api/v1/go/:id`，再通过运行时 API 地址转发，避免镜像固化构建机地址。
 
 ## 设计摘要
 
@@ -51,10 +68,12 @@ Mock 账号：管理员 `admin@2api.hub / admin123456`、站长 `merchant@2api.h
 - 公共数据使用不读取 Cookie 的 `publicApi`，榜单与探测数据 60 秒、目录 300 秒；首页 ISR 60 秒，厂商目录和鉴定页 300 秒，站点/渠道详情按需静态生成并以 60 秒刷新。带 URL 筛选的页面保留动态渲染，同时复用 Data Cache。私有 `serverApi` 强制 no-store。
 - 收藏通过客户端共享请求读取，公共缓存不含当前用户收藏；`/me` 保留私有初值。通过同源 API 修改公开资料或评价会立即失效公共标签、公开布局和 sitemap。Next 的 API rewrite 位于 fallback，确保写入先经过 Route Handler 的失效逻辑。
 - 验证脚本：`node apps/web/scripts/check-seo.mjs`，25 项检查在开发和生产模式均通过，覆盖独立摘要、结构化数据、sitemap/robots 和三类 PNG。生产模式已确认首页/目录缓存 HIT，站点与渠道首次 MISS、再次 HIT；结果为 `artifacts/seo-checks.json`、`isr-production-checks.json`，分享图预览为 `og-home.png`、`og-model.png`、`og-site.png`。
+- 生产模式及最终 standalone 下已验证评价保存与删除都会让站点页首次请求 MISS，并立即反映变化，下一次请求恢复 HIT；测试评价已清理。最终证据为 `artifacts/standalone-cache-invalidation.json` 与 `.md`。
 
 ## 已做验证
 
 - TypeScript strict 类型检查与 `HUB_MOCK=0` 生产构建通过。
+- Standalone/Docker 调整后，Mock 与真实开发服务的 42 项路由检查再次全部通过；Mock 和真实 `/go/1` 均返回 302。验收容器已停止，3210 已恢复 `HUB_MOCK=0` 的开发服务。
 - Mock 下 39 个公开、站长与管理路由返回 200，另 3 项游客重定向检查通过，无页面运行错误，结果保存在 `apps/web/artifacts/mock-route-checks.json`；游客重定向及用户 403、API 的 401/403 正常。
 - Mock 全链路：草稿 → 添加渠道 → 连接失败/成功 → 发现模型 → 0 元覆盖价 → 排队检测/任务完成 → 提交审核 → 管理通过 → 公开展示 → 暂停/恢复；评价隐藏、用户禁用、脱敏与越权拒绝也已验证。
 - 浏览器验证个人评价提交 → 个人中心列表 → 确认删除 → 空态；鉴定表单与逐项模拟报告正常。
@@ -76,20 +95,24 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 | 密码上限前后端不同 | 101–128 位密码在浏览器通过、API 拒绝 | 前端与 Mock 已对齐 100 位 |
 | 注册空昵称发送空字符串 | optional 昵称被 API 的 min(1) 拒绝 | 前端改为空值时省略字段 |
 | 站长详情将原生 SQL 的 snake_case 报告传入 camelCase 序列化函数 | 有检测报告的站点详情可能返回 500 | 12 个种子站点详情/32 份报告真实复测通过 |
-| 渠道关键连接配置修改后沿用 lastTestOk | 无效新配置仍可使用旧成功记录提交 | 后端已修；失败测试后变更配置清空状态已通过，成功测试后失效待上游 |
+| 渠道关键连接配置修改后沿用 lastTestOk | 无效新配置仍可使用旧成功记录提交 | 后端已修；真实成功连接后改 Key 清空状态、未重测提交 400、重测恢复提交均通过 |
 | PUT 模型全删重建 | 仅修改覆盖价也丢失已有检测元数据 | 后端改为 upsert；真实 ID、映射、覆盖价及非空检测历史/可信分保留均通过 |
 | 管理渠道/站点 PATCH 剥除若干可编辑字段 | UI 返回成功但连接配置、contact/slug 等未保存 | 后端已修，全部字段真实定向复测通过 |
 | 管理修改倍率未排检测任务 | 与规格要求的倍率修改触发重新检测不符 | 已通知后端 |
 | 允许四项评分权重全 0 | 推荐分计算可能出现 0 分母 | 后端已修，拒绝全零且保留原值的真实复测通过 |
 | 管理厂商仅返回公开摘要，缺官网/简介/排序 | 编辑时无法完整回显已有资料 | 编排者批准 AdminVendor；前端/Mock 已接入，真实完整回读、部分更新保留和显式 null 清空均通过 |
 | 原始 SQL 的 created_at 实际为字符串 | `/sites` 500 | 后端已修复并真实复测 200 |
-| probe 的外部 undici Agent 与 Node 内置 fetch 不兼容 | 上游直连正常，API 的连接测试/鉴定仍报 network | 已给检测负责人具体 `UND_ERR_INVALID_ARG / invalid onRequestStart method` 证据，待修复后续跑 |
+| probe 的外部 undici Agent 与 Node 内置 fetch 不兼容 | 上游直连正常，API 的连接测试/鉴定仍报 network | 检测负责人已统一 undici fetch/Agent；真实连接成功、公开鉴定 100/genuine 已通过 |
 
 `GET /me/reviews` 与 `DELETE /me/reviews/:id` 已获批准，`MyReview` 已进入共享契约，前端与 Mock 均已接入；真实创建、同站更新、分页、越权拒绝、本人删除及重复删除 404 均已通过。测试收藏与评价已清理，因无删除用户接口保留一个无业务数据的测试账号。
 
-真实公开/用户接口最近完整检查为 23 通过、1 失败、1 跳过；其中失败的 stableOnly=false 随后定向复测已通过，实际鉴定仍待成功连接。管理定向复测完成后共 30 项通过、0 项失败、2 项待补测（倍率排队）。管理检查包含独立目录/公告 CRUD、用户角色/封禁恢复、反馈、评分保存恢复、审计与检测任务排队 202。测试权重已恢复；原独立草稿站点 #20 / 渠道 #40 等随后端集成测试的种子恢复清理。成功链已新建独立草稿站点 #15 / 渠道 #35，待探测连接修复后续跑。
+真实公开/用户接口最近完整检查为 25 通过、0 失败、0 跳过，包含 `stableOnly=false` 和实际公开鉴定。管理定向复测共 30 项通过、0 项失败、2 项待补测（倍率排队）。管理检查包含独立目录/公告 CRUD、用户角色/封禁恢复、反馈、评分保存恢复、审计与检测任务排队 202。测试权重已恢复；原独立草稿站点 #20 / 渠道 #40 等随后端集成测试的种子恢复清理。
+
+真实成功链使用独立站点 #15 / 渠道 #35：连接 200 → 修改 Key 清空连接记录 → 未重测提交 400 且仍为草稿 → 重测 200 → 发现并映射 18 个模型 → 正常保留单一主测模型 → 提交后状态 pending。入驻检测任务 #1 已排队，执行终态、审核通过与倍率重检待 worker。资源保留用于续跑，定时探测关闭；结果为 `artifacts/admin-success-chain-results.json`。
 
 真实桌面截图已覆盖首页、榜单、渠道详情、入驻向导和管理审核；390px 截图已覆盖首页、榜单、渠道详情、向导和审核，无文档横向溢出，页面捕获的运行错误为空。真实历史图表已在浏览器切换近 7 天和近 1 小时，数据加载与选中态正常。真实榜单暂无统计数据的状态已确认正常显示；首页未收到探测样本时显示「等待探测」。截图为 `apps/web/artifacts/*-real-*.png`。
+
+真实浏览器公开鉴定显示 100/100、genuine 与八项检查，完成后 Key 输入清空，未捕获运行错误；截图 `artifacts/verify-real-report.png`。普通用户收藏在公共页面 hydration 后正确回填，第一页中四条已收藏渠道状态正确。最终 390px 榜单截图为 `artifacts/rankings-final-mobile.png`，文档宽度 390px，无运行错误；本轮 Ego TaskSpace 29 已按规范结束。
 
 页面检查：`HUB_ROUTE_MODE=mock node apps/web/scripts/check-web-routes.mjs`；真实模式省略 `HUB_ROUTE_MODE`。通过实际 curl 遍历路由并检查流式错误页与登录重定向。
 
@@ -97,11 +120,11 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 
 ## 尚未真实联调的接口
 
-公开目录、榜单、报告、历史、认证、完整用户评价/收藏 CRUD、站长 CRUD/模型价格与管理读取/目录 CRUD/用户/反馈/评分/审计已联调。连接成功、模型发现、提交审核、检测任务完成和实际公开鉴定仍依赖 8712 上游与 worker。Proxy 与 Cookie 透传的真实会话验证已通过。
+公开目录、榜单、报告、历史、认证、完整用户评价/收藏 CRUD、站长 CRUD/模型价格、连接成功、模型发现、提交审核、实际公开鉴定与管理读取/目录 CRUD/用户/反馈/评分/审计已联调。剩余检测任务执行终态、审核成功后公开展示/统计、倍率重检链依赖 worker。Proxy 与 Cookie 透传的真实会话验证已通过。
 
 ## 已知限制
 
-- 真实检测、统计聚合和任务处理依赖 API、worker 与 mock-upstream 就绪。
+- 后台排队检测和统计聚合仍依赖 worker 启动；API 与 mock-upstream 已就绪。
 - Mock 仅供开发演示，不提供持久化；其中评分、历史和报告为 fixture。
 - 移动端对比表和后台密集表格在自身容器内横向滚动。
 - Next 流式响应的部分 403/404 页面可能以 HTTP 200 返回，但内容显示对应状态；API 保持实际 401/403/404。

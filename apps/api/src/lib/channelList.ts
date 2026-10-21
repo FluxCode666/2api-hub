@@ -96,10 +96,27 @@ export async function queryChannels(
     modelId = found[0].id;
   }
   const priceJoin = modelId !== null
-    ? sql`LEFT JOIN channel_models pm ON pm.channel_id = c.id AND pm.model_id = ${modelId}
-          LEFT JOIN models m ON m.id = pm.model_id`
-    : sql`LEFT JOIN channel_models pm ON pm.channel_id = c.id AND pm.upstream_name = c.primary_model
-          LEFT JOIN models m ON m.id = pm.model_id`;
+    // 按模型查榜单：lateral 每渠道只取一行（主测模型优先，其次有覆盖价的，最后价格最低的），
+    // 避免同一渠道多个 upstream_name 映射同一 model_id 导致重复上榜
+    ? sql`LEFT JOIN LATERAL (
+        SELECT pm0.id, pm0.upstream_name, pm0.price_override_input, pm0.price_override_output, pm0.model_id
+        FROM channel_models pm0
+        WHERE pm0.channel_id = c.id AND pm0.model_id = ${modelId}
+        ORDER BY
+          (pm0.upstream_name = c.primary_model) DESC NULLS LAST,
+          (pm0.price_override_input IS NOT NULL) DESC,
+          COALESCE(pm0.price_override_input, 999999) ASC,
+          pm0.id ASC
+        LIMIT 1
+      ) pm ON true
+      LEFT JOIN models m ON m.id = pm.model_id`
+    : sql`LEFT JOIN LATERAL (
+        SELECT pm0.id, pm0.upstream_name, pm0.price_override_input, pm0.price_override_output, pm0.model_id
+        FROM channel_models pm0
+        WHERE pm0.channel_id = c.id AND pm0.upstream_name = c.primary_model
+        LIMIT 1
+      ) pm ON true
+      LEFT JOIN models m ON m.id = pm.model_id`;
   if (modelId !== null) conditions.push(sql`pm.model_id IS NOT NULL`);
 
   if (params.vendor) {

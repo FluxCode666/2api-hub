@@ -6,6 +6,7 @@ import type {
   ChannelModelBrief, VendorRef, ProbeRun, AuthenticityReport, ProbeTask,
 } from '@hub/shared';
 import type { ChannelStatsRow, SiteStatsRow } from './types';
+import { publicErrorMessage } from './sanitize';
 import { DEFAULT_SETTINGS } from '@hub/shared';
 import type { SettingsMap } from '@hub/shared';
 
@@ -84,8 +85,8 @@ export function probeRunView(r: {
     success: r.success,
     httpStatus: r.httpStatus,
     errorCode: r.errorCode,
-    // 公开接口中脱敏，避免泄露上游信息
-    errorMessage: sanitize && r.errorMessage ? r.errorMessage.slice(0, 80) : r.errorMessage,
+    // 公开接口：不返回原始 errorMessage，用 errorCode 映射固定中文分类（防 Key/上游信息泄露）
+    errorMessage: sanitize ? publicErrorMessage(r.errorCode) : r.errorMessage,
     latencyMs: r.latencyMs,
     ttftMs: r.ttftMs,
     outputTokens: r.outputTokens,

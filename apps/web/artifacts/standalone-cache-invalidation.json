@@ -1,0 +1,59 @@
+{
+  "generatedAt": "2026-10-21T17:55:47.340Z",
+  "origin": "http://127.0.0.1:3210",
+  "path": "/sites/xinghe-api",
+  "runtime": "standalone",
+  "passed": true,
+  "cleaned": true,
+  "retainedEmptyAccount": true,
+  "snapshots": [
+    {
+      "phase": "warm",
+      "status": 200,
+      "cache": "MISS",
+      "cacheControl": "s-maxage=60, stale-while-revalidate=31535940",
+      "markerPresent": false
+    },
+    {
+      "phase": "warm-confirm",
+      "status": 200,
+      "cache": "HIT",
+      "cacheControl": "s-maxage=60, stale-while-revalidate=31535940",
+      "markerPresent": false
+    },
+    {
+      "phase": "first-read-after-save",
+      "status": 200,
+      "cache": "MISS",
+      "cacheControl": "s-maxage=60, stale-while-revalidate=31535940",
+      "markerPresent": true
+    },
+    {
+      "phase": "saved-cache-hit",
+      "status": 200,
+      "cache": "HIT",
+      "cacheControl": "s-maxage=60, stale-while-revalidate=31535940",
+      "markerPresent": true
+    },
+    {
+      "phase": "first-read-after-delete",
+      "status": 200,
+      "cache": "MISS",
+      "cacheControl": "s-maxage=60, stale-while-revalidate=31535940",
+      "markerPresent": false
+    },
+    {
+      "phase": "deleted-cache-hit",
+      "status": 200,
+      "cache": "HIT",
+      "cacheControl": "s-maxage=60, stale-while-revalidate=31535940",
+      "markerPresent": false
+    }
+  ],
+  "checks": [
+    "修改前FullRoute缓存HIT",
+    "保存评价后首次访问MISS且HTML立即出现；随后HIT保留",
+    "删除评价后首次访问MISS且HTML立即消失；随后HIT保持消失",
+    "临时评价全部清理，退出并清会话Cookie"
+  ]
+}
