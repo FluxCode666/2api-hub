@@ -9,7 +9,7 @@
  */
 import { BENCHMARK_TEXT, O200K_BENCHMARK_TOKENS, TOKEN_COUNT_TOLERANCE, VENDOR_CALIBRATION } from '../src/calibration.ts';
 import { getAdapter, type ProtocolCapture } from '../src/adapters.ts';
-import { redactWithKey } from '../src/types.ts';
+import { redactThenTruncate, redactWithKey } from '../src/types.ts';
 import { safeFetch, readBodyLimited } from '../src/http.ts';
 import { SseParser } from '../src/sse.ts';
 import type { ChannelProtocol } from '@hub/shared';
@@ -98,7 +98,7 @@ async function measure(args: CliArgs, userText: string): Promise<OneRun> {
     });
     if (!res.ok) {
       const { text } = await readBodyLimited(res);
-      return { inputTokens: null, ok: false, error: redactWithKey(text.slice(0, 150), args.apiKey) };
+      return { inputTokens: null, ok: false, error: redactThenTruncate(text, args.apiKey, 150) };
     }
     // 流式消费，取 usage
     const capture: ProtocolCapture = {

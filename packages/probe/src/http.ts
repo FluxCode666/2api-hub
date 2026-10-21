@@ -151,14 +151,16 @@ export function getAgent(allowPrivate: boolean): Agent {
  */
 export async function safeFetch(opts: SafeFetchOptions): Promise<UndiciResponse> {
   const allowPrivate = opts.allowPrivate ?? process.env.ALLOW_PRIVATE_PROBE === 'true';
+  // P1#6 修复：signal 组合在任何网络动作（含入口 DNS 校验）之前创建，
+  // 总预算 deadline 对 DNS、连接、请求全程生效
+  const timeoutMs = opts.timeoutMs ?? 30_000;
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = opts.signal ? AbortSignal.any([opts.signal, timeoutSignal]) : timeoutSignal;
   // 第一层：入口校验——未通过的 URL 直接抛 SsrfBlockError，fetch 不会执行
   await assertSafeUrlImpl(opts.url, allowPrivate);
   // 已通过 SSRF 校验的 URL（scheme 白名单 + DNS 解析后非私网地址）
   const url = opts.url;
   const agent = getAgent(allowPrivate);
-  const timeoutMs = opts.timeoutMs ?? 30_000;
-  const timeoutSignal = AbortSignal.timeout(timeoutMs);
-  const signal = opts.signal ? AbortSignal.any([opts.signal, timeoutSignal]) : timeoutSignal;
   const init: undiciRequestInit = {
     method: (opts.method ?? 'GET').toUpperCase(),
     headers: opts.headers,

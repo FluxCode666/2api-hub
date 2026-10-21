@@ -59,7 +59,9 @@ export function matchCatalogModelImpl(upstreamName: string, catalog: CatalogEntr
  * 一致 = 完全相同，或归一化后相同，或回显是请求的「带日期/点号变体」。
  */
 export function modelEchoMatches(requested: string, echoed: string | null | undefined): boolean {
-  if (!echoed) return false;
+  // P2#12：运行时类型防御——非字符串的 echoed（上游返回 42 等）按缺失处理
+  if (typeof echoed !== 'string' || !echoed) return false;
+  if (typeof requested !== 'string' || !requested) return false;
   if (requested === echoed) return true;
   const a = normalizeModelName(requested);
   const b = normalizeModelName(echoed);

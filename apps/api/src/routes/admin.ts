@@ -301,6 +301,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const { task, reused } = await enqueueProbeTask(db, {
       channelId: c.id, kind: input.kind, trigger: 'admin', requestedBy: admin.id,
     });
+    if (!task) throw new HttpError(429, 'rate_limited', '任务额度已满');
     void reply.status(reused ? 200 : 202);
     return task;
   });
@@ -312,7 +313,7 @@ export async function adminRoutes(app: FastifyInstance) {
       name: z.string().min(1).max(100).optional(),
       description: z.string().max(1000).nullish(),
       baseUrl: httpUrl().optional(),
-      apiKey: z.string().min(1).max(500).optional(),
+      apiKey: z.string().min(8, 'API Key 长度至少 8 位').max(500).optional(),
       protocol: z.enum(['openai_chat', 'openai_responses', 'anthropic', 'gemini']).optional(),
       primaryModel: z.string().min(1).max(200).optional(),
       backupModel: z.string().max(200).nullish(),

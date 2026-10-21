@@ -14,7 +14,7 @@ import { computeUsage } from './usage.js';
 import { buildNonStream, thinkingFor, writeStream, type ReplyContext, type ToolCallSpec } from './protocols.js';
 
 const PORT = Number(process.env.MOCK_UPSTREAM_PORT ?? 8712);
-const HOST = '127.0.0.1';
+const HOST = process.env.MOCK_HOST ?? '127.0.0.1';
 const BODY_LIMIT = 1024 * 1024; // 1MB
 
 /** fake 场景的模型名改写 */
@@ -36,6 +36,8 @@ interface ExtractedRequest {
   hasTools: boolean;
   /** anthropic thinking 参数 */
   hasThinking: boolean;
+  /** P2#11 严格协议校验：非法请求返回 400 */
+  validationError: string | null;
 }
 
 function textFromContent(content: unknown): string {
@@ -121,7 +123,49 @@ function extractRequest(protocol: Protocol, body: Record<string, unknown>): Extr
     hasTools = Array.isArray(tools) && tools.some((t) => Array.isArray(t.functionDeclarations) && t.functionDeclarations.length > 0);
   }
 
-  return { inputText, model, stream, hasTools, hasThinking };
+  return { inputText, model, stream, hasTools, hasThinking, validationError: validateProtocolRequest(protocol, body) };
+}
+
+/**
+ * P2#11 严格协议校验（审查要求：结构非法返回 400，才能发现检测器同类问题）：
+ * - anthropic：thinking.budget_tokens 必须 < max_tokens（官方约束）
+ * - openai_responses：tools 必须是顶层 {type:'function', name, parameters} 结构
+ *   （Chat Completions 的 {type:'function',function:{name,...}} 嵌套结构非法）
+ */
+function validateProtocolRequest(
+  protocol: Protocol,
+  body: Record<string, unknown>,
+): string | null {
+  if (protocol === 'anthropic') {
+    const thinking = body.thinking as { type?: unknown; budget_tokens?: unknown } | undefined;
+    if (thinking && thinking !== null) {
+      const budget = thinking.budget_tokens;
+      const maxTokens = body.max_tokens;
+      if (typeof budget !== 'number' || !Number.isFinite(budget) || budget <= 0) {
+        return 'thinking.budget_tokens 必须是正数';
+      }
+      if (typeof maxTokens !== 'number' || !Number.isFinite(maxTokens)) {
+        return 'max_tokens 必须是数字';
+      }
+      if (budget >= maxTokens) {
+        return `thinking.budget_tokens (${budget}) 必须小于 max_tokens (${maxTokens})`;
+      }
+    }
+  }
+  if (protocol === 'openai_responses') {
+    const tools = body.tools;
+    if (Array.isArray(tools) && tools.length > 0) {
+      for (const t of tools as Record<string, unknown>[]) {
+        if (t && typeof t === 'object' && 'function' in t) {
+          return 'Responses API 的 tools 必须是顶层 {type:"function", name, parameters} 结构（不能嵌套 function 字段）';
+        }
+        if (!t || typeof t !== 'object' || typeof (t as { name?: unknown }).name !== 'string') {
+          return 'Responses API 的每个 tool 必须有顶层 name 字段';
+        }
+      }
+    }
+  }
+  return null;
 }
 
 // ---------------- 模型列表 ----------------
@@ -300,6 +344,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     const extracted = extractRequest(protocol, body);
+    if (extracted.validationError) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: { type: 'invalid_request_error', message: extracted.validationError } }));
+      log(400);
+      return;
+    }
     const model = geminiAction ? geminiAction.model : extracted.model;
     const stream = geminiAction ? geminiAction.stream || extracted.stream : extracted.stream;
 

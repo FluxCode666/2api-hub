@@ -35,8 +35,12 @@ export function networkErrorToCode(err: unknown, signalAborted: boolean): { code
   if (signalAborted) return { code: 'timeout', message: '请求超时' };
   const e = err as { name?: string; message?: string; cause?: { code?: string; name?: string } };
   const causeCode = e?.cause?.code;
+  const causeName = e?.cause?.name;
   const name = e?.name ?? '';
-  if (name === 'AbortError' || signalAborted) return { code: 'timeout', message: '请求超时' };
+  // undici 的 AbortSignal.timeout 触发时：DOMException name='TimeoutError'（cause 链）
+  if (name === 'AbortError' || name === 'TimeoutError' || causeName === 'TimeoutError') {
+    return { code: 'timeout', message: '请求超时' };
+  }
   if (causeCode === 'ENOTFOUND' || causeCode === 'EAI_AGAIN' || /getaddrinfo/i.test(e?.message ?? '')) {
     return { code: 'dns', message: '域名解析失败' };
   }
@@ -94,7 +98,9 @@ export function redact(text: string | null): string | null {
 export function redactWithKey(text: string | null, apiKey: string | undefined | null): string | null {
   if (!text) return text;
   let out = text;
-  if (apiKey && apiKey.length >= 8) {
+  // 修复 P1#1(b)：长度 ≥ 4 的 Key 都精确替换（输入端拒绝 <8 是 API 的职责，
+  // probe 自身防御按 ≥4；<4 的 Key（如 'abc'）替换会误伤普通词，维持不替换）
+  if (apiKey && apiKey.length >= 4) {
     const variants = new Set<string>([apiKey]);
     try {
       variants.add(encodeURIComponent(apiKey));
@@ -115,7 +121,7 @@ export function redactWithKey(text: string | null, apiKey: string | undefined | 
     }
     // 长变体优先替换，避免短变体先匹配破坏长变体
     for (const v of [...variants].sort((a, b) => b.length - a.length)) {
-      if (v.length >= 8) {
+      if (v.length >= 4) {
         out = out.split(v).join('[REDACTED]');
       }
     }
@@ -123,6 +129,13 @@ export function redactWithKey(text: string | null, apiKey: string | undefined | 
     // 若 Key 含正则特殊字符，split/join 也是字面量替换，安全。
   }
   return redact(out);
+}
+
+/** 统一出口（P1#1 修复）：先脱敏，再截断——避免完整 Key 跨越截断边界后精确匹配失效 */
+export function redactThenTruncate(text: string | null, apiKey: string | undefined | null, maxLen: number): string | null {
+  const redacted = redactWithKey(text, apiKey);
+  if (redacted === null) return null;
+  return redacted.length > maxLen ? redacted.slice(0, maxLen) : redacted;
 }
 
 /** 深度遍历对象，对其中的所有字符串做按真实 Key 的精确脱敏（evidence 等嵌套结构） */

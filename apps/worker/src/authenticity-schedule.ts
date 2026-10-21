@@ -44,11 +44,15 @@ export async function scheduleAuthenticitySweep(deps: AuthenticityScheduleDeps):
 
   let enqueued = 0;
   for (const r of rows) {
-    await db.execute(sql`
+    // NOT EXISTS 检查与 INSERT 之间存在竞态窗口（另一实例可能已入队），
+    // 唯一索引 probe_tasks_active_uq 冲突时视为已入队，不中断 sweep（审查建议）
+    const inserted = await db.execute<{ id: number }>(sql`
       INSERT INTO probe_tasks (channel_id, kind, trigger, payload, status)
       VALUES (${r.channel_id}, 'authenticity', 'schedule', '{}'::jsonb, 'queued')
+      ON CONFLICT DO NOTHING
+      RETURNING id
     `);
-    enqueued += 1;
+    enqueued += inserted.length;
   }
   return enqueued;
 }

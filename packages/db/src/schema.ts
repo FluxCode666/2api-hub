@@ -225,6 +225,11 @@ export const probeTasks = pgTable('probe_tasks', {
   attempts: integer('attempts').notNull().default(0),
   result: jsonb('result').$type<unknown>(),
   error: text('error'),
+  // 任务 lease（审查 #3）：当前持有者实例 id、领取令牌（每次领取新生成）、心跳时间。
+  // 副作用写入必须带 lease_token 校验；回收只处理心跳过期的任务。
+  lockedBy: text('locked_by'),
+  leaseToken: uuid('lease_token'),
+  heartbeatAt: ts('heartbeat_at'),
   createdAt: createdAt(),
   startedAt: ts('started_at'),
   finishedAt: ts('finished_at'),

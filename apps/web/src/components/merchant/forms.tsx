@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent, type ReactNode } from 'react';
+import {apiKeyInputValidation, apiKeyTooShort, API_KEY_LENGTH_ERROR} from '@/lib/api-key';
 import { PROTOCOL_LABELS, SITE_TYPE_LABELS, PAYMENT_METHOD_LABELS } from '@hub/shared';
 import type { ChannelInput, MerchantChannel, MerchantSite, ModelSummary, SiteInput, SiteType, VendorSummary, ChannelProtocol, BillingType } from '@hub/shared';
 
@@ -48,7 +49,7 @@ export function SiteForm({ site, onSave, submitLabel = '保存站点' }: { site?
 export function ChannelForm({ channel, vendors, models, onSave, submitLabel = '保存渠道' }: { channel?: MerchantChannel; vendors: VendorSummary[]; models: ModelSummary[]; onSave: (input: ChannelInput) => Promise<void>; submitLabel?: string }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('');
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form); setBusy(true); setError('');
+    event.preventDefault(); const form = event.currentTarget; const data = new FormData(form); const key = text(data, 'apiKey'); if (apiKeyTooShort(key, Boolean(channel))) { setError(API_KEY_LENGTH_ERROR); return; } setBusy(true); setError('');
     const input: ChannelInput = { name: text(data, 'name'), description: optional(data, 'description'), vendorSlug: optional(data, 'vendorSlug'), protocol: text(data, 'protocol') as ChannelProtocol, baseUrl: text(data, 'baseUrl'), groupRatio: Number(data.get('groupRatio')), billingType: text(data, 'billingType') as BillingType, primaryModel: text(data, 'primaryModel'), backupModel: optional(data, 'backupModel'), rpmLimit: numberOrNull(data, 'rpmLimit') };
     if (!channel) input.declaredModels = list(data, 'declaredModels');
     if (text(data, 'apiKey')) input.apiKey = text(data, 'apiKey');
@@ -60,7 +61,7 @@ export function ChannelForm({ channel, vendors, models, onSave, submitLabel = '�
       <Field label="主要厂商"><select className="select" name="vendorSlug" defaultValue={channel?.vendor?.slug ?? ''}><option value="">多厂商 / 未指定</option>{vendors.map((v) => <option value={v.slug} key={v.slug}>{v.nameZh ?? v.name}</option>)}</select></Field>
       <Field label="API 协议"><select className="select" name="protocol" defaultValue={channel?.protocol ?? 'openai_chat'}>{Object.entries(PROTOCOL_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field>
       <Field label="接口地址"><input className="input mono" name="baseUrl" type="url" defaultValue={channel?.baseUrl} placeholder="https://api.example.com" required /></Field>
-      <Field label={channel ? '更新检测密钥（可选）' : '检测用 API Key'} hint={channel ? `当前 ${channel.apiKeyMask}；留空保留原密钥。` : '仅用于平台检测，请使用独立、限额的测试密钥。'}><input className="input mono" name="apiKey" type="password" autoComplete="new-password" placeholder={channel ? '留空不修改' : 'sk-...'} required={!channel} /></Field>
+      <Field label={channel ? '更新检测密钥（可选）' : '检测用 API Key'} hint={channel ? `当前 ${channel.apiKeyMask}；留空保留原密钥。` : '仅用于平台检测，请使用独立、限额的测试密钥。'}><input className="input mono" name="apiKey" type="password" {...apiKeyInputValidation} autoComplete="new-password" placeholder={channel ? '留空不修改' : 'sk-...'} required={!channel} /></Field>
       <Field label="分组倍率" hint="实际倍率 = 分组倍率 ÷ 站点充值倍率。"><input className="input mono" name="groupRatio" type="number" step="any" min="0.000001" defaultValue={channel?.groupRatio ?? 1} required /></Field>
       <Field label="主测模型"><input className="input mono" name="primaryModel" list="merchant-models" defaultValue={channel?.primaryModel} placeholder="上游模型 ID" required /></Field>
       <Field label="备用模型（可选）"><input className="input mono" name="backupModel" list="merchant-models" defaultValue={channel?.backupModel ?? ''} /></Field>

@@ -29,3 +29,11 @@
 ## 2026-10-22 推荐分可用率改为非线性 —— 编排者
 
 > `computeRecommendScore` 中 `uptime_part` 由 `uptime24h × 100` 改为 `uptime24h ^ 8 × 100`（常量 `UPTIME_SCORE_EXPONENT`）。原因：线性计分下 69% 可用率渠道推荐分仍有 81.9，与 99% 渠道差距过小。前端 `/guide` 公式说明需同步。另：可信分 < 50（判为假模型）时推荐分封顶 40（常量 `FAKE_SCORE_CAP`）。
+
+## 2026-10-22 probe_tasks 任务 lease 字段 —— Worker（审查修复 P1 #3）
+
+- 变更：`packages/db/src/schema.ts` 的 `probeTasks` 新增 3 个可空列并生成迁移 `packages/db/drizzle/0002_probe_tasks_lease.sql`：`locked_by`（text，持有者 worker 实例 id）、`lease_token`（uuid，每次领取新生成）、`heartbeat_at`（timestamptz，每 30s 心跳续租）。
+- 原因：审查 P1 #3 发现任务回收与退出缺少实例所有权——超时回收无心跳、退出 SQL 归还所有近期 running 任务、完成/失败写入不校验领取代次，旧执行者可覆盖新执行者的状态并重复写报告/通知。
+- 语义：任务完成、失败以及写报告、发通知等副作用写入均带 `WHERE id=$1 AND lease_token=$2` 校验，校验失败放弃写入；回收只处理 `heartbeat_at` 超过恢复阈值的任务；退出时只归还 `locked_by=本实例` 的任务。attempts 上限检查放进原子领取语句。
+- 兼容性：向后兼容（只新增可空列，不改已有字段）；hub 与 hub_test 均已执行迁移。
+- 顺带修复：drizzle/meta/0001_snapshot.json 之前是 0000 的直接拷贝（id 相同、prevId 未维护），导致 drizzle-kit generate 报 snapshot collision；已补全 prevId 链（0001.prevId → 0000.id，0001.id 换新 uuid），0002 迁移由 drizzle-kit 正常生成。

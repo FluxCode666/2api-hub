@@ -1,0 +1,53 @@
+[
+  {
+    "mode": "verify",
+    "minLength": 8,
+    "validationMessage": "API Key 长度至少 8 位",
+    "requests": [],
+    "errors": []
+  },
+  {
+    "mode": "merchant-create",
+    "minLength": 8,
+    "validationMessage": "API Key 长度至少 8 位",
+    "requests": [],
+    "errors": []
+  },
+  {
+    "mode": "eight-character-boundary",
+    "valid": true,
+    "validationMessage": ""
+  },
+  {
+    "mode": "merchant-edit",
+    "minLength": 8,
+    "validationMessage": "API Key 长度至少 8 位",
+    "requests": [],
+    "errors": []
+  },
+  {
+    "mode": "admin-edit",
+    "minLength": 8,
+    "validationMessage": "API Key 长度至少 8 位",
+    "requests": [],
+    "errors": []
+  },
+  {
+    "mode": "admin-edit-keep-existing",
+    "valid": true,
+    "validationMessage": ""
+  },
+  {
+    "mode": "admin-save-without-notice",
+    "message": "渠道已保存。仅接口地址、API Key、协议或主测模型变化会重新检测；倍率修改只更新价格。",
+    "requests": [
+      {
+        "url": "/api/v1/admin/channels/130",
+        "method": "PATCH",
+        "status": 200,
+        "notice": null
+      }
+    ],
+    "errors": []
+  }
+]

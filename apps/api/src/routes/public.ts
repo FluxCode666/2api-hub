@@ -246,97 +246,92 @@ export async function publicRoutes(app: FastifyInstance) {
   app.post('/api/v1/verify', async (req, reply): Promise<AuthenticityReport> => {
     const input = z.object({
       baseUrl: httpUrl(),
-      apiKey: z.string().min(1).max(500),
+      apiKey: z.string().min(8, 'API Key 长度至少 8 位').max(500),
       model: z.string().min(1).max(200),
       protocol: z.enum(['openai_chat', 'openai_responses', 'anthropic', 'gemini']),
     } satisfies Record<keyof VerifyRequest, z.ZodTypeAny>).parse(req.body);
 
-    // 全局并发上限（内存计数，进程内有效）
+    // 全局并发上限：同步占用信号量（第一个 await 之前），统一 finally 释放
     if (verifyInFlight >= VERIFY_GLOBAL_CONCURRENCY) {
       throw new HttpError(429, 'rate_limited', '鉴定服务繁忙，请稍后再试');
     }
-
-    const rows = await db.select().from(settings);
-    // SAFETY: DEFAULT_SETTINGS 全量默认，库中覆盖值由管理接口按同一类型写入
-    const settingsMap = { ...DEFAULT_SETTINGS, ...Object.fromEntries(rows.map((r) => [r.key, r.value])) } as unknown as SettingsMap;
-    const limit = settingsMap['verify.hourlyLimitPerIp'];
-    const hash = ipHash(req.ip);
-
-    // 原子预留额度：事务内先插入 pending 记录再计数（覆盖执行中的请求）
-    let host: string;
-    try {
-      host = new URL(input.baseUrl).host;
-    } catch {
-      throw badRequest('baseUrl 不是合法 URL');
-    }
-    const reservation = await db.transaction(async (tx) => {
-      // 先插入占位记录（score=null verdict=unknown 表示执行中/未完成）
-      const [row] = await tx.insert(verifyRequests).values({
-        ipHash: hash, host, model: input.model, protocol: input.protocol,
-        score: null, verdict: 'unknown',
-      }).returning({ id: verifyRequests.id });
-      // 同事务内计数（含刚插入的这条）
-      const recent = await tx.select({ c: count() }).from(verifyRequests)
-        .where(and(eq(verifyRequests.ipHash, hash), sql`${verifyRequests.createdAt} > now() - interval '1 hour'`));
-      if ((recent[0]?.c ?? 0) > limit) {
-        // 超出额度：回滚（抛错触发 rollback），不预留
-        throw new HttpError(429, 'rate_limited', `鉴定请求过于频繁，每小时最多 ${limit} 次`);
-      }
-      return row!;
-    });
-
-    // 单 IP 并发上限 1：同一 ipHash 同时只允许一个执行中的鉴定
-    if (verifyIpInFlight.has(hash)) {
-      // 退还预留的记录
-      await db.delete(verifyRequests).where(eq(verifyRequests.id, reservation.id));
-      throw new HttpError(429, 'rate_limited', '同一 IP 同时只能执行一次鉴定');
-    }
-
     verifyInFlight++;
-    verifyIpInFlight.add(hash);
-
+    const hash = ipHash(req.ip);
     try {
-      const probe = await import('@hub/probe');
-      // 目录匹配提示
-      const catalog = await db.select({ id: models.id, slug: models.slug, aliases: models.aliases }).from(models).where(eq(models.isActive, true));
-      const matchedId = probe.matchCatalogModel(input.model, catalog);
-      let hint = null;
-      if (matchedId !== null) {
-        const m = (await db.select().from(models).where(eq(models.id, matchedId)).limit(1))[0];
-        if (m) {
-          const v = (await db.select().from(vendors).where(eq(vendors.id, m.vendorId)).limit(1))[0];
-          hint = { slug: m.slug, vendorSlug: v?.slug ?? '', tier: m.tier, knowledgeCutoff: m.knowledgeCutoff, expectedTps: m.expectedTps };
-        }
-      }
+      const rows = await db.select().from(settings);
+      // SAFETY: DEFAULT_SETTINGS 全量默认，库中覆盖值由管理接口按同一类型写入
+      const settingsMap = { ...DEFAULT_SETTINGS, ...Object.fromEntries(rows.map((r) => [r.key, r.value])) } as unknown as SettingsMap;
+      const limit = settingsMap['verify.hourlyLimitPerIp'];
 
-      let result;
+      // 原子预留额度：事务内先插入 pending 记录再计数（覆盖执行中的请求）
+      let host: string;
       try {
-        result = await probe.probeAuthenticity(
-          { baseUrl: input.baseUrl, apiKey: input.apiKey, protocol: input.protocol, model: input.model },
-          hint,
-          { quick: true, timeoutMs: 60000 },
-        );
-      } catch (err) {
-        if (isProbeNotImplemented(err)) throw probeUnavailable();
-        if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'ssrf_blocked') {
-          throw badRequest('目标地址不安全（禁止探测私网/保留地址）');
-        }
-        throw err;
+        host = new URL(input.baseUrl).host;
+      } catch {
+        throw badRequest('baseUrl 不是合法 URL');
       }
+      const reservation = await db.transaction(async (tx) => {
+        const [row] = await tx.insert(verifyRequests).values({
+          ipHash: hash, host, model: input.model, protocol: input.protocol,
+          score: null, verdict: 'unknown',
+        }).returning({ id: verifyRequests.id });
+        const recent = await tx.select({ c: count() }).from(verifyRequests)
+          .where(and(eq(verifyRequests.ipHash, hash), sql`${verifyRequests.createdAt} > now() - interval '1 hour'`));
+        if ((recent[0]?.c ?? 0) > limit) {
+          throw new HttpError(429, 'rate_limited', `鉴定请求过于频繁，每小时最多 ${limit} 次`);
+        }
+        return row!;
+      });
 
-      // 回填预留记录的真实结果
-      await db.update(verifyRequests).set({ score: result.score, verdict: result.verdict })
-        .where(eq(verifyRequests.id, reservation.id));
+      // 单 IP 并发上限 1（同步检查）
+      if (verifyIpInFlight.has(hash)) {
+        await db.delete(verifyRequests).where(eq(verifyRequests.id, reservation.id));
+        throw new HttpError(429, 'rate_limited', '同一 IP 同时只能执行一次鉴定');
+      }
+      verifyIpInFlight.add(hash);
 
-      void reply.header('cache-control', 'no-store');
-      return { ...result, id: null, channelId: null, trigger: 'public', createdAt: new Date().toISOString() };
-    } catch (err) {
-      // 失败退还预留额度（删除占位记录）
-      await db.delete(verifyRequests).where(eq(verifyRequests.id, reservation.id)).catch(() => {});
-      throw err;
+      try {
+        const probe = await import('@hub/probe');
+        const catalog = await db.select({ id: models.id, slug: models.slug, aliases: models.aliases }).from(models).where(eq(models.isActive, true));
+        const matchedId = probe.matchCatalogModel(input.model, catalog);
+        let hint = null;
+        if (matchedId !== null) {
+          const m = (await db.select().from(models).where(eq(models.id, matchedId)).limit(1))[0];
+          if (m) {
+            const v = (await db.select().from(vendors).where(eq(vendors.id, m.vendorId)).limit(1))[0];
+            hint = { slug: m.slug, vendorSlug: v?.slug ?? '', tier: m.tier, knowledgeCutoff: m.knowledgeCutoff, expectedTps: m.expectedTps };
+          }
+        }
+
+        let result;
+        try {
+          result = await probe.probeAuthenticity(
+            { baseUrl: input.baseUrl, apiKey: input.apiKey, protocol: input.protocol, model: input.model },
+            hint,
+            { quick: true, timeoutMs: 60000 },
+          );
+        } catch (err) {
+          if (isProbeNotImplemented(err)) throw probeUnavailable();
+          if (err instanceof Error && 'code' in err && (err as { code: string }).code === 'ssrf_blocked') {
+            throw badRequest('目标地址不安全（禁止探测私网/保留地址）');
+          }
+          throw err;
+        }
+
+        await db.update(verifyRequests).set({ score: result.score, verdict: result.verdict })
+          .where(eq(verifyRequests.id, reservation.id));
+
+        void reply.header('cache-control', 'no-store');
+        return { ...result, id: null, channelId: null, trigger: 'public', createdAt: new Date().toISOString() };
+      } catch (err) {
+        // 失败退还预留额度（删除占位记录）
+        await db.delete(verifyRequests).where(eq(verifyRequests.id, reservation.id)).catch(() => {});
+        throw err;
+      } finally {
+        verifyIpInFlight.delete(hash);
+      }
     } finally {
       verifyInFlight--;
-      verifyIpInFlight.delete(hash);
     }
   });
 

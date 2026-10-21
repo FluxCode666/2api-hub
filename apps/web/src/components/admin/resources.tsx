@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import type { AdminOverview, AdminSite, AdminUser, FeedbackItem, AdminReview, AuditLog, MerchantChannel, ChannelInput, ChannelProtocol, BillingType, ProbeRun, ProbeTask, Role, UserStatus, ChannelStatus, ProbeKind } from '@hub/shared';
 import { SITE_STATUS_LABELS, PROTOCOL_LABELS } from '@hub/shared';
-import { api } from '@/lib/api/client';
+import { api, apiWithHeaders, apiNoticeMessage } from '@/lib/api/client';
+import {apiKeyInputValidation, apiKeyTooShort, API_KEY_LENGTH_ERROR} from '@/lib/api-key';
 import { useRouter } from 'next/navigation';
 import { AdminTable, MutationButton, RecordLink, DateValue, Status, actionRowStyle } from './common';
 
@@ -25,16 +26,17 @@ function ChannelEditor({ item }: { item: MerchantChannel }) {
   async function save(form: FormData) {
     setPending(true); setMessage('');
     try {
-      const key = String(form.get('apiKey') ?? '');
+      const key = String(form.get('apiKey') ?? '').trim();
+      if (apiKeyTooShort(key, true)) { setMessage(API_KEY_LENGTH_ERROR); return; }
       const body: Partial<ChannelInput & Pick<MerchantChannel, 'status' | 'probeEnabled' | 'probeIntervalSec'>> = { name: String(form.get('name')), baseUrl: String(form.get('baseUrl')), groupRatio: Number(form.get('groupRatio')), primaryModel: String(form.get('primaryModel')), backupModel: String(form.get('backupModel') ?? '').trim() || null, rpmLimit: form.get('rpmLimit') ? Number(form.get('rpmLimit')) : null, protocol: String(form.get('protocol')) as ChannelProtocol, billingType: String(form.get('billingType')) as BillingType, status: String(form.get('status')) as ChannelStatus, probeEnabled: form.get('probeEnabled') === 'on', probeIntervalSec: Number(form.get('probeIntervalSec')), ...(key ? { apiKey: key } : {}) };
-      await api<unknown>(`/admin/channels/${item.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-      setMessage('渠道已保存。仅接口地址、API Key、协议或主测模型变化会重新检测；倍率修改只更新价格。'); router.refresh();
+      const {headers} = await apiWithHeaders<unknown>(`/admin/channels/${item.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      setMessage(apiNoticeMessage(headers) ?? '渠道已保存。仅接口地址、API Key、协议或主测模型变化会重新检测；倍率修改只更新价格。'); router.refresh();
     } catch (error) { setMessage(error instanceof Error ? error.message : '保存失败'); } finally { setPending(false); }
   }
   return <details><summary className="btn btn-small">编辑</summary><form action={save} className="stack panel" style={{ minWidth: 280, marginTop: 12 }}>
     <label className="field">渠道名称<input className="input" name="name" required defaultValue={item.name} /></label>
     <label className="field">上游地址<input className="input" name="baseUrl" type="url" required defaultValue={item.baseUrl} /></label>
-    <label className="field">更新检测密钥<input className="input" name="apiKey" type="password" autoComplete="new-password" placeholder={`留空保持 ${item.apiKeyMask}`} /></label>
+    <label className="field">更新检测密钥<input className="input" name="apiKey" type="password" {...apiKeyInputValidation} autoComplete="new-password" placeholder={`留空保持 ${item.apiKeyMask}`} /></label>
     <label className="field">协议<select className="select" name="protocol" defaultValue={item.protocol}>{Object.entries(PROTOCOL_LABELS).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
     <label className="field">主测模型<input className="input" name="primaryModel" required defaultValue={item.primaryModel} /></label>
     <label className="field">备用模型<input className="input" name="backupModel" defaultValue={item.backupModel ?? ''} /></label>

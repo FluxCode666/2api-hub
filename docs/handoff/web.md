@@ -133,6 +133,13 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 
 最终截图包括 `home-desktop/mobile.png`、`home-top3-*`、`home-activity-*`、`rankings-*`、`verify-genuine/fake-*`、`flaky-*`、`dead-*`、`merchant-report-*`、`admin-approved-*`、`guide-scoring-*`；均已目视检查。鉴定结果、审核成功链、检测任务与失效只读规则分别见 `verify-results.json`、`success-chain.json`、`browser-task.json`、`dead-browser.json`。没有未解决的前端联调阻塞。
 
+## API 第二轮修复配合（2026-10-22）
+
+- 所有 API Key 输入（站长新建/编辑、管理员编辑、公开鉴定）统一最小长度 8、最大 500。原生表单错误与提交前校验均使用「API Key 长度至少 8 位」；编辑留空仍表示保留原 Key。
+- 客户端新增 `apiWithHeaders`，保留响应资源与 Headers；原 `api` 调用方式兼容。站长和管理渠道保存识别 `X-Hub-Notice: rate_limited:*`，行内提示「配置已保存，但今日自动检测额度已用完，本次未重新检测。」；不将保存成功误报为失败。
+- Next 同源 Route Handler 原已保留业务响应头，真实浏览器确认 `X-Hub-Notice` 经过代理后可读。验收中发现后端 raw 中文头值会导致 Node `ERR_INVALID_CHAR`，已交 Kimi 改为 ASCII `rate_limited:merchant_daily_limit`；前端按前缀映射固定中文。
+- 独立测试站点 #66 / 渠道 #130，手动任务 #86/#87/#88 完成并耗尽当日额度。修改 Key 仍返回 200，浏览器真实显示额度提示、无运行错误，任务仍仅为三条手动任务和一条入驻任务，活动任务为零。四类表单的短 Key 在浏览器均被拦截，不发送写请求；8 位边界与编辑留空允许，管理员普通保存 200 且不误显示额度提示。验收后删除空草稿 #67，下架测试站点 #66 并保持定时探测关闭；原 #15/#35 未改动。本轮 `typecheck` 和真实 API 生产 `build` 均通过，构建后恢复 3210 的真实模式开发服务。证据和截图在 `apps/web/artifacts/key-notice/`，Ego TaskSpace 32 已关闭。
+
 ## 尚未真实联调的接口
 
 本次范围内无待联调接口。公开目录、榜单、报告、历史、认证、用户评价/收藏 CRUD、站长 CRUD/模型价格、连接测试、模型发现、提交审核、公开鉴定与管理读取/目录 CRUD/用户/反馈/评分/审计均已联调。真实检测终态、审核后公开展示/统计和定时探测也已联调。Proxy 与 Cookie 透传的真实会话验证已通过。

@@ -20,6 +20,8 @@ export interface AggregateResult {
   channelStats: number;
   siteStats: number;
   durationMs: number;
+  /** 单渠道聚合失败数（不中断整轮，审查 #4） */
+  failedChannels: number;
 }
 
 /** db.execute 的行类型（要求 Record 索引签名；时间列为 ISO 字符串） */
@@ -114,15 +116,17 @@ export function buildChannelStat(
 
 const CHANNEL_AGG_SQL = sql`
   WITH latest AS (
-    -- 主测模型最近一次真伪报告（channel_stats.trust_score 的来源）
+    -- 主测模型最近一次真伪报告（channel_stats.trust_score 的来源；只看已上线站点）
     SELECT DISTINCT ON (ar.channel_id)
       ar.channel_id, ar.score, ar.verdict
     FROM authenticity_reports ar
     JOIN channels c2 ON c2.id = ar.channel_id
-    WHERE ar.model = c2.primary_model
+    JOIN sites s2 ON s2.id = c2.site_id
+    WHERE s2.status = 'approved' AND ar.model = c2.primary_model
     ORDER BY ar.channel_id, ar.created_at DESC
   ),
   agg AS (
+    -- 只统计主测模型的 availability 记录（备用模型探测不计入渠道可用率，审查 #15）
     SELECT
       r.channel_id,
       AVG(CASE WHEN r.created_at > now() - interval '1 hour' THEN CASE WHEN r.success THEN 1.0 ELSE 0 END END)::float8 AS uptime_1h,
@@ -141,39 +145,46 @@ const CHANNEL_AGG_SQL = sql`
                  r2.success AS ok, r2.latency_ms AS ms
           FROM probe_runs r2
           WHERE r2.channel_id = r.channel_id AND r2.kind = 'availability'
+            AND r2.model = c3.primary_model
           ORDER BY r2.created_at DESC
           LIMIT 60
         ) x
       ) AS sparkline
     FROM probe_runs r
-    WHERE r.kind = 'availability'
-    GROUP BY r.channel_id
+    JOIN channels c3 ON c3.id = r.channel_id
+    WHERE r.kind = 'availability' AND r.model = c3.primary_model
+    GROUP BY r.channel_id, c3.primary_model
   ),
   cf AS (
-    -- 连续失败次数：最近一次成功之后的全部失败（无成功则全表失败数）
+    -- 连续失败次数（只计主测模型）：最近一次成功之后的全部失败（无成功则全部失败）
     SELECT r.channel_id,
       COUNT(*)::int AS consecutive_failures
     FROM probe_runs r
-    WHERE r.kind = 'availability'
+    JOIN channels c4 ON c4.id = r.channel_id
+    WHERE r.kind = 'availability' AND r.model = c4.primary_model
       AND NOT r.success
       AND r.created_at > COALESCE((
         SELECT MAX(r3.created_at) FROM probe_runs r3
-        WHERE r3.channel_id = r.channel_id AND r3.kind = 'availability' AND r3.success
+        WHERE r3.channel_id = r.channel_id AND r3.kind = 'availability'
+          AND r3.model = c4.primary_model AND r3.success
       ), to_timestamp(0))
     GROUP BY r.channel_id
   )
   SELECT
     c.id AS channel_id,
-    agg.uptime_1h, agg.uptime_24h, agg.uptime_7d, agg.samples_24h,
+    agg.uptime_1h, agg.uptime_24h, agg.uptime_7d,
+    COALESCE(agg.samples_24h, 0) AS samples_24h,
     agg.latency_p50, agg.latency_p95, agg.ttft_avg,
     COALESCE(cf.consecutive_failures, 0) AS consecutive_failures,
     agg.last_success_at, agg.last_failure_at, agg.last_probe_at,
     latest.score AS trust_score, latest.verdict AS trust_verdict,
     agg.sparkline
   FROM channels c
+  JOIN sites s ON s.id = c.site_id
   LEFT JOIN agg ON agg.channel_id = c.id
   LEFT JOIN cf ON cf.channel_id = c.id
   LEFT JOIN latest ON latest.channel_id = c.id
+  WHERE s.status = 'approved'  -- 只聚合已上线站点（审查 #4：草稿/审核中站点跳过）
 `;
 
 const SITE_AGG_SQL = sql`
@@ -206,11 +217,20 @@ const SITE_AGG_SQL = sql`
 export async function runAggregation(db: Database, opts: AggregateOptions): Promise<AggregateResult> {
   const startedAt = Date.now();
 
+  // 先清理非 approved 站点渠道的统计行（站点下线后不再统计，审查 #4）
+  await db.execute(sql`
+    DELETE FROM channel_stats cs
+    USING channels c JOIN sites s ON s.id = c.site_id
+    WHERE cs.channel_id = c.id AND s.status <> 'approved'
+  `);
+
   // ---- channel_stats：SQL 聚合 + JS 算推荐分后逐行 upsert ----
   const rows = await db.execute<AggRow>(CHANNEL_AGG_SQL);
   let channelCount = 0;
+  let failedChannels = 0;
   for (const r of rows) {
-    const stat = buildChannelStat(r, opts);
+    try {
+      const stat = buildChannelStat(r, opts);
     await db.execute(sql`
       INSERT INTO channel_stats (channel_id, uptime_1h, uptime_24h, uptime_7d, samples_24h,
         latency_p50_24h, latency_p95_24h, ttft_avg_24h, consecutive_failures,
@@ -231,7 +251,12 @@ export async function runAggregation(db: Database, opts: AggregateOptions): Prom
         recommend_score = EXCLUDED.recommend_score, sparkline = EXCLUDED.sparkline,
         updated_at = EXCLUDED.updated_at
     `);
-    channelCount += 1;
+      channelCount += 1;
+    } catch (err: unknown) {
+      // 单个渠道聚合失败不中断整轮（审查 #4）
+      failedChannels += 1;
+      console.error(`[aggregate] channel ${r.channel_id} failed:`, err instanceof Error ? err.message : err);
+    }
   }
 
   // ---- site_stats（依赖上面写好的 channel_stats） ----
@@ -266,5 +291,5 @@ export async function runAggregation(db: Database, opts: AggregateOptions): Prom
     opts.metrics.lastAggregateAt = Date.now();
     opts.metrics.aggregatesRun += 1;
   }
-  return { channelStats: channelCount, siteStats: siteCount, durationMs };
+  return { channelStats: channelCount, siteStats: siteCount, durationMs, failedChannels };
 }

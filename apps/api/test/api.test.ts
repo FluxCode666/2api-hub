@@ -377,6 +377,27 @@ describe('#5 入队去重', () => {
     // 恢复
     await db.execute(sql`UPDATE channels SET base_url = 'http://127.0.0.1:8712/genuine' WHERE id = ${ctx.cheap.id}`);
   });
+
+  it('#7 并发回归：无活动任务时 15 个并发全部完成（不挂起）', async () => {
+    // 清掉已有活动任务
+    await db.execute(sql`UPDATE probe_tasks SET status = 'done', finished_at = now()
+      WHERE channel_id = ${ctx.dear.id} AND status IN ('queued','running')`);
+    const cookie = await login('test-merchant@t.dev');
+    // 并发 15 个手动检测（超过默认连接池容量 10）
+    const promises = Array.from({ length: 15 }, () =>
+      app.inject({ method: 'POST', url: `/api/v1/merchant/channels/${ctx.dear.id}/authenticity`, headers: { cookie }, payload: {} }),
+    );
+    const results = await Promise.all(promises);
+    // 全部应返回（不挂起）：第一个 202 新建，其余 200 复用或 429 超限
+    for (const r of results) {
+      expect([200, 202, 429]).toContain(r.statusCode);
+    }
+    // 最终最多只有 1 个活动任务（唯一索引保证）
+    const active = await db.execute<Record<string, unknown>>(sql`
+      SELECT count(*)::int AS cnt FROM probe_tasks
+      WHERE channel_id = ${ctx.dear.id} AND kind = 'authenticity' AND status IN ('queued','running')`);
+    expect(Number(active[0]?.['cnt'])).toBeLessThanOrEqual(1);
+  });
 });
 
 describe('失效渠道可读（编排者决策）', () => {

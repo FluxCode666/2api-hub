@@ -159,3 +159,73 @@ TLS 修复有效，核心 SSRF 双重检查没有退化；有数据渠道的聚�
 | P1 #4 verify 额度竞争与并发控制 | **部分通过** | 同 IP 12 并发实际仅 1 次探测；继续顺序请求至总数 10 后，第 11 次 429。6 个不同 IP 同时请求却全部执行，上游并发达到 6，声明的全局 4 失效，见问题 8；跨进程每 IP 额度的事务串行化仍未得到保证。quick 实测 65 秒也超总预算，见问题 6。 |
 | P1 #5 手动额度 / PATCH / 入队去重 | **部分通过，仍有 P1** | 同 Key PATCH 12 次，任务总数不变（1→1）；已存在任务时 12 并发全部返回 200 并复用任务 81。三个独立 merchant 任务完成后，手动第 4 次返回 429，额度路径有效。但无活动任务时 12 并发会连接池挂起，见问题 7；改真实 Key 可以排入第 4 个 merchant 任务 84，见问题 9。唯一索引已经在库中确认存在。 |
 | P1 #6 API 容器监听 | **生产 compose 路径通过** | `apps/api/src/index.ts` 实际使用 API_HOST，`deploy/docker-compose.prod.yml:59` 设为 0.0.0.0；独立应用按该地址监听临时端口，实际 address=0.0.0.0、healthz=200。未构建/重启生产容器。注意修复记录说 Dockerfile 也设置了该变量，但实际 Dockerfile 没有，单独 docker run 必须显式传 API_HOST；worker 健康服务和 mock 仍默认/固定绑定 loopback，不能从 API 的 compose 修复推断它们的外部端口也已修复。 |
+
+## API 第二轮修复记录（Kimi，2026-10-22）
+
+| # | 问题 | 修复 |
+| --- | --- | --- |
+| 1 | Key 脱敏长度门槛/截断顺序 | 所有 Key 入口（创建/更新渠道、/verify）校验 ≥ 8 位（中文报错）；API 侧 `sanitizeKeyFromText` 门槛 ≥ 4；先替换再截断由调用方保证（probe 边界由 GLM-A 负责） |
+| 7 | enqueue 事务用外层 db 连接 | `enqueueProbeTask` 事务内所有查询（含 settings 读取）统一用 `tx`；开头 `SET LOCAL lock_timeout='5s'` + `statement_timeout='10s'`；新增回归测试：无活动任务时 15 并发全部完成（不挂起），最终活动任务 ≤ 1 |
+| 8 | /verify 全局并发可被突破 | 信号量 `verifyInFlight++` 移到第一个 `await` 之前（同步占用），统一 `finally` 释放；6 个不同 IP 并发时上游最大并发 ≤ 4（进程级语义已在 README/handoff 说明） |
+| 9 | PATCH 绕过每日额度 | 额度规则收进 `enqueueProbeTask` 内部（`trigger=merchant && kind=authenticity` 自动计入，去掉可选布尔参数）；超额度时 PATCH 配置照常保存但不入队，响应头 `X-Hub-Notice: rate_limited:...` 告知前端 |
+| Dockerfile | api 缺 API_HOST | `apps/api/Dockerfile` 加 `ENV API_HOST=0.0.0.0`；compose 中 worker 加 `WORKER_HOST=0.0.0.0`、mock-upstream 加 `MOCK_HOST=0.0.0.0`（对应变量由 GLM-A/GLM-B 在各自入口读取） |
+
+typecheck 通过；23 个测试全通过（新增 #7 并发回归）。
+
+---
+
+## Worker 修复记录（2026-10-22，第二轮审查修复）
+
+负责人：Worker（apps/worker/**）。以下问题已修复并通过验收（hub_test 隔离库 typecheck + 26 测试全过 + 开发环境重启观察 2 分钟无报错）：
+
+### P1 #2 定时探测重复领取
+`scheduler.ts` 重写：到期筛选（approved 站点 + active 渠道 + probe_enabled + next_probe_at <= now）、最近 3 条全败降频计算、`FOR UPDATE OF SKIP LOCKED` 行锁、推进 `next_probe_at` 合并为**一条原子 UPDATE**（`claimDueChannels`），锁定阶段保留完整谓词——另一实例用旧快照重复领取时，谓词（`next_probe_at <= now()`）已不成立，不会二次领取。
+
+### P1 #3 任务 lease
+- schema 增量迁移 `0002_probe_tasks_lease.sql`：`locked_by`（text）/ `lease_token`（uuid）/ `heartbeat_at`（timestamptz）三个可空列（drizzle-kit 生成，hub 与 hub_test 均已迁移，CONTRACT-CHANGES 已记录；顺带修复 0001 snapshot 的 prevId 链断裂）。
+- 领取（`claimNextTask`）：原子 UPDATE 写入新 `lease_token` + `locked_by` + `heartbeat_at`；attempts 上限检查放进领取语句（超限 queued 任务直接标 failed，不进入执行）。
+- 心跳：执行中每 30s `heartbeatTask` 续租（`WHERE id AND lease_token AND status='running'`）；authenticity 多模型循环每个模型前检查 lease，丢失即停止。
+- 副作用校验：完成/失败/requeue（`completeWithLease`）、authenticity_reports 写入、channel_models trust 回写、task_done/task_failed 通知全部带 lease 校验，校验失败放弃写入——旧执行者无法覆盖新执行者。
+- 回收（`reclaimStaleTasks`）：只处理 `heartbeat_at` 超过恢复阈值的 running 任务（不再看 started_at），requeue 并清 lease。
+- 退出（`releaseMyTasks`）：只归还 `locked_by = 本实例` 的任务。
+- 测试覆盖：lease 写入/续租/易主放弃写入/只归还本实例 四个用例。
+
+### P1 #4 无样本渠道中断聚合
+- SQL `COALESCE(agg.samples_24h, 0)`、`COALESCE(cf.consecutive_failures, 0)`；应用层 `buildChannelStat` 同步防御（fakeRow 测试含 samples_24h=0 分支）。
+- 逐渠道 try/catch：单个渠道 upsert 失败记录 error 并继续（`failedChannels` 计入返回值与日志），不中断整轮。
+- 只聚合 approved 站点的渠道；非 approved 站点的 channel_stats 行每轮清理。
+- 新增「零样本渠道」真实集成用例（自建零 probe_runs 渠道，断言 samples_24h=0、uptime=null、recommend=null、failedChannels=0）。
+
+### P1 #5 测试污染开发库
+worker 测试全部改用独立库 **hub_test**（`test/setup.ts`：DATABASE_URL 替换库名 + **强制校验库名以 `_test` 结尾否则 process.exit(1)**），与 API 测试同一隔离方式。不再有「隐藏全库 queued 任务再恢复」的全库 UPDATE——每测试自建独立渠道/站点，afterEach 级联清理；tasks 测试 beforeAll 清空 hub_test 的 probe_tasks 残留（隔离库内清空，非开发库）。
+
+### #1 Key 脱敏（worker 侧防御）
+`probes.ts` 新增 `scrubKey`：写 `probe_runs.error_message`、任务 error、task_failed 通知正文前，用渠道解密后的真实 Key 做精确子串替换（任意长度、不限 ≥8；split/join 字面替换无正则转义问题）。测试：5 字符 Key `xyz12`、`sk-w-tasks` 出现在错误文本时落库/通知均已替换为 `***`。
+
+### #10 多模型 hint
+`runAuthenticity`：每个 model 先 `matchCatalogModel` 匹配目录 id，再取该模型自己的 CatalogHint（vendor/tier/knowledge/tps），不再对整个 models 列表共用一个 hint。
+
+### #13 任务并发与配置刷新
+- 任务执行与定时探测共享同一全局/单站点 limiter：`claimNextTask` 领取后 `limiter.acquire(siteId)` 占位，占不到则原子 requeue（带 lease 校验），不再无预算直连。
+- 定时探测超时改用 settings 的 `probe.timeoutMs`（不再硬编码 30s）。
+- settings 每 60s 刷新（`refreshSettings` 循环）：并发上限变化时重建 limiter、超时即时生效（SchedulerDeps 的 limiter/probeTimeoutMs/globalMax 均为 getter）。
+
+### #14 已领取探测丢失
+- `claimDueChannels` 只领取全局剩余容量内的数量（`capacity = globalMax - inFlight`）；同站点满时放弃执行（渠道 next_probe_at 已推进，下轮自然重试），删除内存 pending 队列。
+- 退出时 `scheduler.drain()` 等待全部在途探测完成（探测自身有超时上限，drain 受 30s 总预算约束）。
+
+### #15 模型状态回写与备用模型
+- 主测模型探测后回写 channel_models：`last_status`（pass/fail）、`last_latency_ms`、`last_tested_at`、`last_error`（UPSERT）。
+- 备用模型（`channels.backup_model` 非空）单独探测：独立 probe_runs 记录 + 回写自己的 channel_models 行；**不更新渠道级时间戳、不参与失败升级**；聚合（uptime/样本数/连败/sparkline）与降频判断均只统计 `model = primary_model` 的记录。测试：备用模型记录不影响渠道可用率（10 主测样本 + 5 条备用失败后 uptime 仍 0.9）。
+
+### #16 连败降频判定
+领取 SQL 中降频条件改为 `(bool_and(NOT success) AND COUNT(*) = 3)`——恰好 3 条且全部失败才降频。测试：仅 1 条失败记录的渠道仍用基础间隔 600s±10%（断言 next_probe_at 推进 530-670s）。
+
+### 定时 authenticity 入队冲突
+`authenticity-schedule.ts`：INSERT 加 `ON CONFLICT DO NOTHING`，唯一索引 `probe_tasks_active_uq` 冲突视为已入队（RETURNING 空数组不计入 enqueued），不中断 sweep。
+
+### 验收记录
+- `pnpm --filter @hub/worker typecheck`：通过。
+- `pnpm --filter @hub/worker test`（hub_test）：**4 文件 26 用例全过**（aggregate 7 + scheduler 6 + probes 5 + tasks 8），含零样本、lease 生命周期、备用模型、降频边界、Key 脱敏新用例。
+- `aggregate:once`（开发库）：channel_stats=34、site_stats=14、failed=0、~180ms（34=仅 approved 站点渠道）。
+- 重启验证：SIGINT 优雅停旧实例 → `nohup pnpm --filter @hub/worker start` 重启 → 观察 2 分钟：3 轮聚合（failed=0）、8 次探测全成功、healthz/metrics 正常、无任何报错；手动插入任务 #89 完整流转（lease 写入 → 报告 task_id=89 → done 后 lease 清理）。

@@ -2,6 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createServer, type Server as HttpServer } from 'node:http';
 import { createServer as createTlsServer, type Server as TlsServerType } from 'node:tls';
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { safeFetch } from '../src/http.js';
 import { listUpstreamModels } from '../src/index.js';
 
@@ -27,8 +29,10 @@ beforeAll(async () => {
   httpPort = (httpServer.address() as { port: number }).port;
 
   // 自签证书 TLS 服务（CN=localhost，SAN=localhost/127.0.0.1）
-  const cert = readFileSync('/tmp/probe-tls-test/tlscert');
-  const key = readFileSync('/tmp/probe-tls-test/tlskey');
+  // fixture 位于仓库内 test/fixtures/（重建方法见该目录 README.md），不依赖 /tmp
+  const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
+  const cert = readFileSync(join(fixturesDir, 'tlscert'));
+  const key = readFileSync(join(fixturesDir, 'tlskey'));
   tlsServer = createTlsServer({ cert, key }, (socket) => {
     socket.on('data', () => {
       socket.write('HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: 2\r\n\r\n{}');
@@ -65,15 +69,20 @@ describe('TLS 安全（P1-1 回归）', () => {
     expect(res.status).toBe(200);
   }, 15_000);
 
-  it('自签证书 → 必须失败（证书校验不可关）', async () => {
-    await expect(
-      safeFetch({
-        url: `https://localhost:${tlsPort}/v1/models`,
-        method: 'GET',
-        timeoutMs: 5_000,
-        allowPrivate: true,
-      }),
-    ).rejects.toThrow();
+  it('自签证书 → 必须失败，且失败原因是证书校验（DEPTH_ZERO_SELF_SIGNED_CERT）', async () => {
+    // 用 127.0.0.1 直连：localhost 可能先解析为 ::1 而服务只绑 IPv4，
+    // 会造成 ECONNREFUSED 假阳性（审查点名）——SAN 已含 127.0.0.1，主机名校验独立于信任链
+    let tlsErrorCode: string | null = null;
+    await safeFetch({
+      url: `https://127.0.0.1:${tlsPort}/v1/models`,
+      method: 'GET',
+      timeoutMs: 5_000,
+      allowPrivate: true,
+    }).catch((err: Error & { cause?: { code?: string } }) => {
+      tlsErrorCode = err.cause?.code ?? null;
+    });
+    // 断言具体的 TLS 错误码——不是端口/连接错误伪装的假阳性
+    expect(tlsErrorCode).toBe('DEPTH_ZERO_SELF_SIGNED_CERT');
   }, 15_000);
 
   it('真实联网冒烟：https://api.openai.com 无效 key → http_401/403/429（TLS 握手成功）', async () => {

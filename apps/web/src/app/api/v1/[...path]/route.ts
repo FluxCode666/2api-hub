@@ -29,6 +29,7 @@ async function proxy(request: NextRequest, path: string): Promise<Response> {
       body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer(),
       signal: request.signal,
     });
+    // 保留业务响应头（包括 X-Hub-Notice），只移除传输层头。
     const responseHeaders = new Headers(upstream.headers);
     for (const name of ['content-length', 'content-encoding', 'transfer-encoding', 'connection']) responseHeaders.delete(name);
     responseHeaders.delete('set-cookie');

@@ -136,6 +136,12 @@ docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod --p
 
 详见 [docs/SPEC.md](docs/SPEC.md) §5。
 
+## 限流与并发
+
+- **`/verify` 公开鉴定**：单 IP 每小时额度（默认 10 次，管理后台可调）+ 单 IP 并发上限 1 + 进程级全局并发上限 4。全局上限是**进程级**内存计数，多实例部署时按实例数叠加（如需严格全局上限，需共享令牌存储）。
+- **站长手动真伪检测**：每渠道每日额度（默认 3 次），原子入队（渠道行锁 + 复用活动任务 + 唯一索引兜底）。超额度时 PATCH 配置照常保存但不入队，响应头 `X-Hub-Notice` 提示。
+- **注册**：管理后台 `site.allowRegistration=false` 时关闭。
+
 ## 团队协作
 
 - 契约文件（`docs/SPEC.md`、`packages/shared/**`、`packages/db/src/schema.ts/client.ts/crypto.ts`）由编排者维护，只读。

@@ -82,6 +82,7 @@ services:
         @postgres:5432/${POSTGRES_DB:-hub}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
       WORKER_HEALTH_PORT: 8713
+      WORKER_HOST: 0.0.0.0
       ALLOW_PRIVATE_PROBE: ${ALLOW_PRIVATE_PROBE:-false}
     ports:
       - "${WORKER_HEALTH_PORT:-8713}:8713"
@@ -120,6 +121,7 @@ services:
     restart: unless-stopped
     environment:
       MOCK_UPSTREAM_PORT: 8712
+      MOCK_HOST: 0.0.0.0
     ports:
       - "${MOCK_UPSTREAM_PORT:-8712}:8712"
     networks: [hub]

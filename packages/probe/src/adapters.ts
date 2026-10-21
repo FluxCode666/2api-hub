@@ -52,6 +52,9 @@ export interface ProtocolCapture {
   modelEcho: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  /** P2#12：流内错误终态（OpenAI error 事件 / response.failed / Anthropic error / Gemini error）。
+   * 非空 → 整个响应判失败（invalid_response） */
+  streamError: string | null;
   /** 协议特征检查（response_shape 检查用）：null = 无法评估（如非流式无事件序列） */
   shapeOk: boolean | null;
   shapeDetail: string;
@@ -75,6 +78,7 @@ export function emptyCapture(): ProtocolCapture {
     modelEcho: null,
     inputTokens: null,
     outputTokens: null,
+    streamError: null,
     shapeOk: null,
     shapeDetail: '',
     toolCalls: null,
@@ -99,6 +103,17 @@ export function openaiBase(base: string): string {
 export function geminiBase(base: string): string {
   const b = base.replace(/\/+$/, '');
   return /\/v\d+beta$/.test(b) ? b : `${b}/v1beta`;
+}
+
+/** P2#12 运行时类型校验：字符串字段（非字符串按缺失处理） */
+function asString(v: unknown): string | null {
+  return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
+/** P2#12 运行时类型校验：token 数必须是有限的非负数 */
+function asTokenCount(v: unknown): number | null {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return null;
+  return Math.round(v);
 }
 
 // ---------------- OpenAI Chat Completions ----------------
@@ -127,32 +142,45 @@ export const openaiChatAdapter = {
   /** 解析一条 SSE 事件，增量更新 capture */
   feedEvent(capture: ProtocolCapture, ev: RawSseEvent, firstTokenAt: FirstTokenMark): string | null {
     const data = parseJsonData<{
-      id?: string;
-      model?: string;
-      choices?: { delta?: { content?: string | null; reasoning_content?: string | null; tool_calls?: unknown[] }; finish_reason?: string | null }[];
-      usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
+      id?: unknown;
+      model?: unknown;
+      error?: { message?: unknown; type?: unknown } | null;
+      choices?: { delta?: { content?: unknown; reasoning_content?: unknown; tool_calls?: unknown[] }; finish_reason?: unknown }[];
+      usage?: { prompt_tokens?: unknown; completion_tokens?: unknown } | null;
     }>(ev);
     if (!data) return null;
     capture.eventSequence.push('chunk');
-    if (data.id && !capture.responseId) capture.responseId = data.id;
-    if (data.model) capture.modelEcho = data.model;
+    // P2#12：流内错误终态
+    if (data.error && typeof data.error === 'object') {
+      const msg = asString((data.error as { message?: unknown }).message) ?? asString((data.error as { type?: unknown }).type);
+      capture.streamError = msg ?? 'openai stream error';
+      return null;
+    }
+    // P2#12：运行时类型校验（非字符串一律按缺失）
+    const id = asString(data.id);
+    if (id && !capture.responseId) capture.responseId = id;
+    const modelEcho = asString(data.model);
+    if (modelEcho) capture.modelEcho = modelEcho;
     const choice = data.choices?.[0];
     let delta: string | null = null;
-    if (choice?.delta?.content) {
-      delta = choice.delta.content;
+    const content = choice?.delta?.content;
+    if (typeof content === 'string' && content) {
+      delta = content;
       if (firstTokenAt.atMs === null) firstTokenAt.atMs = Date.now();
-      capture.text += choice.delta.content;
+      capture.text += content;
     }
-    if (choice?.delta?.reasoning_content) {
-      capture.thinkingText = (capture.thinkingText ?? '') + choice.delta.reasoning_content;
+    const reasoning = choice?.delta?.reasoning_content;
+    if (typeof reasoning === 'string' && reasoning) {
+      capture.thinkingText = (capture.thinkingText ?? '') + reasoning;
     }
-    if (choice?.delta?.tool_calls) {
+    if (Array.isArray(choice?.delta?.tool_calls) && choice.delta.tool_calls.length > 0) {
       capture.toolCalls = [...(capture.toolCalls ?? []), ...choice.delta.tool_calls];
     }
-    if (choice?.finish_reason) capture.stopReason = choice.finish_reason;
+    const finish = asString(choice?.finish_reason);
+    if (finish) capture.stopReason = finish;
     if (data.usage) {
-      capture.inputTokens = data.usage.prompt_tokens ?? capture.inputTokens;
-      capture.outputTokens = data.usage.completion_tokens ?? capture.outputTokens;
+      capture.inputTokens = asTokenCount(data.usage.prompt_tokens) ?? capture.inputTokens;
+      capture.outputTokens = asTokenCount(data.usage.completion_tokens) ?? capture.outputTokens;
     }
     return delta;
   },
@@ -215,18 +243,20 @@ export const openaiResponsesAdapter = {
 
   feedEvent(capture: ProtocolCapture, ev: RawSseEvent, firstTokenAt: FirstTokenMark): string | null {
     const data = parseJsonData<{
-      type?: string;
-      response?: { id?: string; model?: string; usage?: { input_tokens?: number; output_tokens?: number }; output?: unknown[] };
-      delta?: string;
+      type?: unknown;
+      response?: { id?: unknown; model?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown }; output?: unknown[]; error?: { message?: unknown } | null };
+      delta?: unknown;
     }>(ev);
-    if (!data || !data.type) return null;
+    if (!data || typeof data.type !== 'string') return null;
     capture.eventSequence.push(data.type);
     let delta: string | null = null;
     switch (data.type) {
       case 'response.created':
       case 'response.in_progress': {
-        if (data.response?.id) capture.responseId = data.response.id;
-        if (data.response?.model) capture.modelEcho = data.response.model;
+        const id = asString(data.response?.id);
+        const modelEcho = asString(data.response?.model);
+        if (id) capture.responseId = id;
+        if (modelEcho) capture.modelEcho = modelEcho;
         break;
       }
       case 'response.output_text.delta': {
@@ -237,12 +267,20 @@ export const openaiResponsesAdapter = {
         }
         break;
       }
+      case 'response.failed': {
+        // P2#12：失败终态——流内错误，整个响应判失败
+        const errMsg = asString(data.response?.error?.message) ?? 'response failed';
+        capture.streamError = errMsg;
+        break;
+      }
       case 'response.completed': {
-        if (data.response?.id) capture.responseId = data.response.id;
-        if (data.response?.model) capture.modelEcho = data.response.model;
+        const id = asString(data.response?.id);
+        const modelEcho = asString(data.response?.model);
+        if (id) capture.responseId = id;
+        if (modelEcho) capture.modelEcho = modelEcho;
         if (data.response?.usage) {
-          capture.inputTokens = data.response.usage.input_tokens ?? capture.inputTokens;
-          capture.outputTokens = data.response.usage.output_tokens ?? capture.outputTokens;
+          capture.inputTokens = asTokenCount(data.response.usage.input_tokens) ?? capture.inputTokens;
+          capture.outputTokens = asTokenCount(data.response.usage.output_tokens) ?? capture.outputTokens;
         }
         capture.raw = data.response;
         // output 数组中提取 reasoning / tool_calls
@@ -346,69 +384,85 @@ export const anthropicAdapter = {
   feedEvent(capture: ProtocolCapture, ev: RawSseEvent, firstTokenAt: FirstTokenMark): string | null {
     // anthropic 事件名在 event: 行，data 里也有 type
     const data = parseJsonData<{
-      type?: string;
-      message?: { id?: string; model?: string; usage?: { input_tokens?: number; output_tokens?: number } };
-      index?: number;
-      content_block?: { type?: string; thinking?: string; signature?: string; text?: string; name?: string };
-      delta?: { type?: string; text?: string; thinking?: string; signature?: string; partial_json?: string; stop_reason?: string };
-      usage?: { input_tokens?: number; output_tokens?: number; cache_creation_input_tokens?: number; cache_read_input_tokens?: number };
-      error?: { type?: string; message?: string };
+      type?: unknown;
+      message?: { id?: unknown; model?: unknown; usage?: { input_tokens?: unknown; output_tokens?: unknown } };
+      index?: unknown;
+      content_block?: { type?: unknown; thinking?: unknown; signature?: unknown; text?: unknown; name?: unknown };
+      delta?: { type?: unknown; text?: unknown; thinking?: unknown; signature?: unknown; partial_json?: unknown; stop_reason?: unknown };
+      usage?: { input_tokens?: unknown; output_tokens?: unknown; cache_creation_input_tokens?: unknown; cache_read_input_tokens?: unknown };
+      error?: { type?: unknown; message?: unknown };
     }>(ev);
     if (!data) return null;
-    const type = data.type ?? ev.event ?? '';
+    const type = typeof data.type === 'string' ? data.type : (ev.event ?? '');
     capture.eventSequence.push(type);
     let delta: string | null = null;
     switch (type) {
       case 'message_start': {
-        if (data.message?.id) capture.responseId = data.message.id;
-        if (data.message?.model) capture.modelEcho = data.message.model;
+        const id = asString(data.message?.id);
+        const modelEcho = asString(data.message?.model);
+        if (id) capture.responseId = id;
+        if (modelEcho) capture.modelEcho = modelEcho;
         if (data.message?.usage) {
-          capture.inputTokens = data.message.usage.input_tokens ?? capture.inputTokens;
-          capture.outputTokens = data.message.usage.output_tokens ?? capture.outputTokens;
+          capture.inputTokens = asTokenCount(data.message.usage.input_tokens) ?? capture.inputTokens;
+          capture.outputTokens = asTokenCount(data.message.usage.output_tokens) ?? capture.outputTokens;
         }
         break;
       }
       case 'content_block_start': {
         const block = data.content_block;
-        if (block?.type === 'thinking') {
-          if (block.thinking) capture.thinkingText = (capture.thinkingText ?? '') + block.thinking;
-          if (block.signature) capture.thinkingSignature = block.signature;
-        } else if (block?.type === 'text') {
-          if (block.text) {
-            delta = block.text;
+        const blockType = asString(block?.type);
+        if (blockType === 'thinking') {
+          const think = asString(block?.thinking);
+          const sig = asString(block?.signature);
+          if (think) capture.thinkingText = (capture.thinkingText ?? '') + think;
+          if (sig) capture.thinkingSignature = sig;
+        } else if (blockType === 'text') {
+          const text = asString(block?.text);
+          if (text) {
+            delta = text;
             if (firstTokenAt.atMs === null) firstTokenAt.atMs = Date.now();
-            capture.text += block.text;
+            capture.text += text;
           }
-        } else if (block?.type === 'tool_use') {
-          capture.toolCalls = [...(capture.toolCalls ?? []), { name: block.name, index: data.index }];
+        } else if (blockType === 'tool_use') {
+          capture.toolCalls = [...(capture.toolCalls ?? []), { name: asString(block?.name), index: data.index }];
         }
         break;
       }
       case 'content_block_delta': {
         const d = data.delta;
-        if (d?.type === 'text_delta' && d.text) {
-          delta = d.text;
-          if (firstTokenAt.atMs === null) firstTokenAt.atMs = Date.now();
-          capture.text += d.text;
-        } else if (d?.type === 'thinking_delta' && d.thinking) {
-          capture.thinkingText = (capture.thinkingText ?? '') + d.thinking;
-        } else if (d?.type === 'signature_delta' && d.signature) {
-          capture.thinkingSignature = d.signature;
-        } else if (d?.type === 'input_json_delta' && d.partial_json) {
-          capture.toolCalls = [...(capture.toolCalls ?? []), { partial_json: d.partial_json, index: data.index }];
+        const dType = asString(d?.type);
+        if (dType === 'text_delta') {
+          const text = asString(d?.text);
+          if (text) {
+            delta = text;
+            if (firstTokenAt.atMs === null) firstTokenAt.atMs = Date.now();
+            capture.text += text;
+          }
+        } else if (dType === 'thinking_delta') {
+          const think = asString(d?.thinking);
+          if (think) capture.thinkingText = (capture.thinkingText ?? '') + think;
+        } else if (dType === 'signature_delta') {
+          const sig = asString(d?.signature);
+          if (sig) capture.thinkingSignature = sig;
+        } else if (dType === 'input_json_delta') {
+          const json = asString(d?.partial_json);
+          if (json) capture.toolCalls = [...(capture.toolCalls ?? []), { partial_json: json, index: data.index }];
         }
         break;
       }
       case 'message_delta': {
-        if (data.delta?.stop_reason) capture.stopReason = data.delta.stop_reason;
+        const stop = asString(data.delta?.stop_reason);
+        if (stop) capture.stopReason = stop;
         if (data.usage) {
-          capture.outputTokens = data.usage.output_tokens ?? capture.outputTokens;
-          capture.inputTokens = data.usage.input_tokens ?? capture.inputTokens;
+          capture.outputTokens = asTokenCount(data.usage.output_tokens) ?? capture.outputTokens;
+          capture.inputTokens = asTokenCount(data.usage.input_tokens) ?? capture.inputTokens;
         }
         break;
       }
       case 'error': {
-        capture.stopReason = `error:${data.error?.type ?? 'unknown'}`;
+        // P2#12：流内错误终态（官方会在流中发 event: error）
+        const errMsg = asString(data.error?.message) ?? asString(data.error?.type) ?? 'anthropic stream error';
+        capture.streamError = errMsg;
         break;
       }
       default:
@@ -483,16 +537,25 @@ export const geminiAdapter = {
 
   feedEvent(capture: ProtocolCapture, ev: RawSseEvent, firstTokenAt: FirstTokenMark): string | null {
     const data = parseJsonData<{
-      candidates?: { content?: { parts?: { text?: string; thought?: boolean; functionCall?: { name?: string; args?: unknown } }[]; role?: string }; finishReason?: string; index?: number }[];
-      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number };
-      responseId?: string;
-      modelVersion?: string;
+      candidates?: { content?: { parts?: { text?: unknown; thought?: unknown; functionCall?: { name?: unknown; args?: unknown } }[]; role?: unknown }; finishReason?: unknown; index?: unknown }[];
+      usageMetadata?: { promptTokenCount?: unknown; candidatesTokenCount?: unknown; totalTokenCount?: unknown };
+      responseId?: unknown;
+      modelVersion?: unknown;
+      error?: { message?: unknown; code?: unknown } | null;
     }>(ev);
     if (!data) return null;
     capture.eventSequence.push('chunk');
+    // P2#12：Gemini 流内错误终态
+    if (data.error && typeof data.error === 'object') {
+      const errMsg = asString(data.error.message) ?? asString(data.error.code) ?? 'gemini stream error';
+      capture.streamError = errMsg;
+      return null;
+    }
     let delta: string | null = null;
-    if (data.responseId && !capture.responseId) capture.responseId = data.responseId;
-    if (data.modelVersion) capture.modelEcho = data.modelVersion;
+    const responseId = asString(data.responseId);
+    const modelVersion = asString(data.modelVersion);
+    if (responseId && !capture.responseId) capture.responseId = responseId;
+    if (modelVersion) capture.modelEcho = modelVersion;
     const cand = data.candidates?.[0];
     for (const part of cand?.content?.parts ?? []) {
       if (typeof part.text === 'string' && part.text) {
@@ -504,14 +567,15 @@ export const geminiAdapter = {
           capture.text += part.text;
         }
       }
-      if (part.functionCall) {
+      if (part.functionCall && typeof part.functionCall === 'object') {
         capture.toolCalls = [...(capture.toolCalls ?? []), part.functionCall];
       }
     }
-    if (cand?.finishReason) capture.stopReason = cand.finishReason;
+    const finish = asString(cand?.finishReason);
+    if (finish) capture.stopReason = finish;
     if (data.usageMetadata) {
-      capture.inputTokens = data.usageMetadata.promptTokenCount ?? capture.inputTokens;
-      capture.outputTokens = data.usageMetadata.candidatesTokenCount ?? capture.outputTokens;
+      capture.inputTokens = asTokenCount(data.usageMetadata.promptTokenCount) ?? capture.inputTokens;
+      capture.outputTokens = asTokenCount(data.usageMetadata.candidatesTokenCount) ?? capture.outputTokens;
     }
     return delta;
   },
@@ -586,26 +650,29 @@ export async function consumeStream(
   let total = 0;
   let truncated = false;
   let sawAnyEvent = false;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      truncated = true;
-      try {
-        await reader.cancel();
-      } catch {
-        // ignore
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        truncated = true;
+        // P2#12：超限截断时释放流
+        await reader.cancel().catch(() => {});
+        break;
       }
-      break;
+      const text = decoder.decode(value, { stream: true });
+      const events = parser.feed(text);
+      for (const ev of events) {
+        sawAnyEvent = true;
+        adapter.feedEvent(capture, ev, firstTokenAt);
+      }
     }
-    const text = decoder.decode(value, { stream: true });
-    const events = parser.feed(text);
-    for (const ev of events) {
-      sawAnyEvent = true;
-      adapter.feedEvent(capture, ev, firstTokenAt);
-    }
+  } catch (err) {
+    // P2#12：读取异常也必须释放流，再向上抛（由 doStreamCapture 的 catch 归类）
+    await reader.cancel().catch(() => {});
+    throw err;
   }
   const tail = parser.flush();
   for (const ev of tail) {

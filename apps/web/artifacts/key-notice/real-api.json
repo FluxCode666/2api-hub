@@ -1,0 +1,62 @@
+{
+  "checkedAt": "2026-10-21T19:37:23.319Z",
+  "siteId": 66,
+  "channelId": 130,
+  "quota": 3,
+  "manualTaskIds": [
+    86,
+    87,
+    88
+  ],
+  "manualTasks": [
+    {
+      "id": 88,
+      "kind": "authenticity",
+      "trigger": "merchant",
+      "status": "done"
+    },
+    {
+      "id": 87,
+      "kind": "authenticity",
+      "trigger": "merchant",
+      "status": "done"
+    },
+    {
+      "id": 86,
+      "kind": "authenticity",
+      "trigger": "merchant",
+      "status": "done"
+    }
+  ],
+  "allChannelTasks": [
+    {
+      "id": 88,
+      "kind": "authenticity",
+      "trigger": "merchant",
+      "status": "done"
+    },
+    {
+      "id": 87,
+      "kind": "authenticity",
+      "trigger": "merchant",
+      "status": "done"
+    },
+    {
+      "id": 86,
+      "kind": "authenticity",
+      "trigger": "merchant",
+      "status": "done"
+    },
+    {
+      "id": 85,
+      "kind": "authenticity",
+      "trigger": "onboarding",
+      "status": "done"
+    }
+  ],
+  "noticeHeader": "rate_limited:merchant_daily_limit",
+  "saveStatus": 200,
+  "activeTasks": [],
+  "probeEnabled": false,
+  "storedKeyMask": "web-****-key"
+}

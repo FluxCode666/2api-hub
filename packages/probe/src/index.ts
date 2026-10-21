@@ -33,6 +33,7 @@ import {
   httpStatusToErrorCode,
   networkErrorToCode,
   redactDeep,
+  redactThenTruncate,
   redactWithKey,
 } from './types.js';
 
@@ -104,6 +105,14 @@ function computeStreamErrorCode(capture: ProtocolCapture): 'empty_response' | nu
   return null;
 }
 
+/** SPEC §5.2：TTFT 独立超时 20s（首内容 token 未在此时间内到达则中止） */
+const TTFT_TIMEOUT_MS = 20_000;
+
+/** 外部 signal（总预算）是否已中止——预算中止不归类为 TTFT 超时（由上层按预算处理） */
+function budgetSignalAborted(opts: ProbeOptions | undefined): boolean {
+  return opts?.signal?.aborted === true;
+}
+
 /** 发起流式请求并完整消费为 capture；错误归类到 ProbeResult（不抛异常） */
 async function doStreamCapture(
   target: ProbeTarget,
@@ -140,20 +149,56 @@ async function doStreamCapture(
       const { message } = networkErrorToCode(err, false);
       return {
         capture,
-        result: failureResult(target, httpStatusToErrorCode(res.status), redactWithKey(text.slice(0, 300), target.apiKey) ?? message, res.status, startedAt),
+        result: failureResult(target, httpStatusToErrorCode(res.status), redactThenTruncate(text, target.apiKey, 300) ?? message, res.status, startedAt),
         startedAt,
         ttftMs: null,
         sseOk: false,
         truncated: false,
       };
     }
-    const { sseOk, truncated } = await consumeStream(res, adapter, capture, firstTokenAt, 2 * 1024 * 1024);
+    // TTFT 独立计时（P1#6）：首个内容 token 20s 未到 → 中止流，判 timeout
+    const ttftTimer = setTimeout(() => {
+      if (firstTokenAt.atMs === null) {
+        void res.body?.cancel().catch(() => {});
+      }
+    }, Math.min(TTFT_TIMEOUT_MS, p.timeoutMs));
+    let sseOk = false;
+    let truncated = false;
+    try {
+      ({ sseOk, truncated } = await consumeStream(res, adapter, capture, firstTokenAt, 2 * 1024 * 1024));
+    } finally {
+      clearTimeout(ttftTimer);
+    }
+    // P2#12：流内错误终态（OpenAI error 事件 / response.failed / Anthropic error / Gemini error）→ 失败
+    if (capture.streamError !== null) {
+      return {
+        capture,
+        result: failureResult(target, 'invalid_response', `流内错误终态：${capture.streamError}`, res.status, startedAt),
+        startedAt,
+        ttftMs: null,
+        sseOk: false,
+        truncated: false,
+      };
+    }
+    if (firstTokenAt.atMs === null && p.timeoutMs > TTFT_TIMEOUT_MS && !budgetSignalAborted(opts)) {
+      // 首内容 token 20s 内未到达且总超时未到——SPEC：TTFT 超时
+      return {
+        capture,
+        result: failureResult(target, 'timeout', 'TTFT 超时（20s 内无首内容 token）', res.status, startedAt),
+        startedAt,
+        ttftMs: null,
+        sseOk: false,
+        truncated: false,
+      };
+    }
     ttftMs = firstTokenAt.atMs !== null ? firstTokenAt.atMs - startedAt : null;
     const latencyMs = Date.now() - startedAt;
     const outputTokens = capture.outputTokens;
     const durationSec = latencyMs > 0 ? latencyMs / 1000 : null;
     const tps = outputTokens !== null && outputTokens > 0 && durationSec && durationSec > 0 ? outputTokens / durationSec : null;
-    const success = capture.text.trim().length > 0 || capture.toolCalls !== null;
+    // P2#12：空 tool_calls 数组不算成功——必须非空 tool_calls 或非空文本
+    const hasToolCalls = Array.isArray(capture.toolCalls) && capture.toolCalls.length > 0;
+    const success = capture.text.trim().length > 0 || hasToolCalls;
     const result: ProbeResult = {
       success,
       model: target.model,
@@ -166,7 +211,7 @@ async function doStreamCapture(
       inputTokens: capture.inputTokens,
       outputTokens,
       tokensPerSec: tps,
-      sample: redactWithKey(capture.text.slice(0, 200), target.apiKey) || null,
+      sample: redactThenTruncate(capture.text, target.apiKey, 200) || null,
       at: new Date().toISOString(),
     };
     return { capture, result, startedAt, ttftMs, sseOk, truncated };
@@ -211,7 +256,19 @@ async function doStreamCaptureWithRetry(
     // 上游返回 Retry-After 的场景由 backoff 梯度近似覆盖）
     const jitter = Math.random() * 300;
     const backoff = Math.min(RETRY_BACKOFF_MS * (attempt + 1) + jitter, RETRY_AFTER_CAP_MS);
-    await new Promise((r) => setTimeout(r, backoff));
+    // P1#6：退避等待可被外部 signal（总预算）打断
+    await new Promise<void>((r) => {
+      const t = setTimeout(r, backoff);
+      if (opts?.signal) {
+        const onAbort = () => { clearTimeout(t); r(); };
+        if (opts.signal.aborted) { clearTimeout(t); r(); return; }
+        opts.signal.addEventListener('abort', onAbort, { once: true });
+      }
+    });
+    if (opts?.signal?.aborted) {
+      // 预算耗尽：不再重试，直接返回（调用方按预算未执行处理）
+      return { ...last, result: { ...last.result, errorCode: 'timeout', errorMessage: '检测时间预算耗尽' } };
+    }
     last = await doStreamCapture(target, opts, payload);
   }
   return last;
@@ -224,14 +281,20 @@ async function doStreamCaptureWithRetry(
 const PING_PROMPT = 'Reply with exactly: pong';
 
 export async function probeAvailability(target: ProbeTarget, opts?: ProbeOptions): Promise<ProbeResult> {
-  const payload: StreamRequestPayload = {
-    model: target.model,
-    messages: [{ role: 'user', content: PING_PROMPT }],
-    maxTokens: 16,
-  };
-  const { result } = await doStreamCapture(target, opts, payload);
-  // 成功判定：收到非空文本内容（HTTP 2xx 由 safeFetch !res.ok 分支保证）
-  return result;
+  // P2#12：公开函数外层兜底——绝不抛异常（审查发现 modelEcho 非字符串曾致 TypeError）
+  try {
+    const payload: StreamRequestPayload = {
+      model: target.model,
+      messages: [{ role: 'user', content: PING_PROMPT }],
+      maxTokens: 16,
+    };
+    const { result } = await doStreamCapture(target, opts, payload);
+    // 成功判定：收到非空文本内容（HTTP 2xx 由 safeFetch !res.ok 分支保证）
+    return result;
+  } catch (err) {
+    const { code, message } = networkErrorToCode(err, opts?.signal?.aborted === true);
+    return failureResult(target, code, message, null);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +302,16 @@ export async function probeAvailability(target: ProbeTarget, opts?: ProbeOptions
 // ---------------------------------------------------------------------------
 
 export async function listUpstreamModels(target: Omit<ProbeTarget, 'model'>, opts?: ProbeOptions): Promise<UpstreamModelList> {
+  // P2#12：公开函数外层兜底——绝不抛异常
+  try {
+    return await listUpstreamModelsImpl(target, opts);
+  } catch (err) {
+    const { code, message } = networkErrorToCode(err, opts?.signal?.aborted === true);
+    return { ok: false, models: [], errorCode: code, errorMessage: message };
+  }
+}
+
+async function listUpstreamModelsImpl(target: Omit<ProbeTarget, 'model'>, opts?: ProbeOptions): Promise<UpstreamModelList> {
   const allowPrivate = opts?.allowPrivate ?? process.env.ALLOW_PRIVATE_PROBE === 'true';
   const timeoutMs = opts?.timeoutMs ?? 30_000;
   const attempt = async (url: string, headers: Record<string, string>): Promise<UpstreamModelList> => {
@@ -246,7 +319,7 @@ export async function listUpstreamModels(target: Omit<ProbeTarget, 'model'>, opt
       const res = await safeFetch({ url, method: 'GET', headers, timeoutMs, signal: opts?.signal, allowPrivate });
       const { text } = await readBodyLimited(res);
       if (!res.ok) {
-        return { ok: false, models: [], errorCode: httpStatusToErrorCode(res.status), errorMessage: redactWithKey(text.slice(0, 200), target.apiKey) };
+        return { ok: false, models: [], errorCode: httpStatusToErrorCode(res.status), errorMessage: redactThenTruncate(text, target.apiKey, 200) };
       }
       let data: unknown;
       try {
@@ -550,28 +623,22 @@ async function runReasoningChecks(
   };
 }
 
-/** 能力探测请求（capability 检查用）：构造带 tools/thinking 的请求 */
+/** 能力探测请求（capability 检查用）：构造带 tools/thinking 的请求
+ * P2#11 修复：anthropic 的 thinking.budget_tokens 必须 < max_tokens（官方约束，
+ * 否则真实 API 400）；openai_responses 的 tools 用顶层 {type,name,parameters} 结构。 */
 function capabilityPayload(target: ProbeTarget, protocol: ChannelProtocol): StreamRequestPayload {
   const base: StreamRequestPayload = {
     model: target.model,
     messages: [
       { role: 'user', content: 'What is the weather in Beijing? Use the provided tool.' },
     ],
-    maxTokens: 256,
-  };
-  const weatherTool = {
-    type: 'function',
-    function: {
-      name: 'get_weather',
-      description: 'Get current weather of a city',
-      parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
-    },
+    maxTokens: 2048,
   };
   if (protocol === 'anthropic') {
     return {
       ...base,
       extra: {
-        thinking: { type: 'enabled', budget_tokens: 1024 },
+        thinking: { type: 'enabled', budget_tokens: 1024 }, // 1024 < max_tokens 2048 ✓
         tools: [{ name: 'get_weather', description: 'Get current weather of a city', input_schema: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] } }],
         tool_choice: { type: 'auto' },
       },
@@ -585,7 +652,30 @@ function capabilityPayload(target: ProbeTarget, protocol: ChannelProtocol): Stre
       },
     };
   }
-  return { ...base, extra: { tools: [weatherTool], tool_choice: 'auto' } };
+  if (protocol === 'openai_responses') {
+    return {
+      ...base,
+      extra: {
+        // Responses API：顶层 {type:'function', name, parameters}（无 function 嵌套）
+        tools: [{ type: 'function', name: 'get_weather', description: 'Get current weather of a city', parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] } }],
+      },
+    };
+  }
+  // openai_chat：嵌套结构
+  return {
+    ...base,
+    extra: {
+      tools: [{
+        type: 'function',
+        function: {
+          name: 'get_weather',
+          description: 'Get current weather of a city',
+          parameters: { type: 'object', properties: { city: { type: 'string' } }, required: ['city'] },
+        },
+      }],
+      tool_choice: 'auto',
+    },
+  };
 }
 
 /** connectivity 检查结果构造：成功 / 临时错误（null 不计分）/ 真实连通失败 */
@@ -606,16 +696,75 @@ function buildConnectivityOutcome(
   };
 }
 
+/** 真伪检测总预算（P1#6 修复）：quick 强制 60s 上限；非 quick 默认 180s（可配） */
+const QUICK_TOTAL_BUDGET_MS = 60_000;
+const DEFAULT_TOTAL_BUDGET_MS = 180_000;
+
 export async function probeAuthenticity(
   target: ProbeTarget,
   hint: CatalogHint | null,
-  opts?: ProbeOptions & { quick?: boolean },
+  opts?: ProbeOptions & { quick?: boolean; totalBudgetMs?: number },
+): Promise<AuthenticityResult> {
+  // P2#12：公开函数外层兜底——绝不抛异常；内部任何未捕获异常降级为 unknown 报告
+  try {
+    return await probeAuthenticityImpl(target, hint, opts);
+  } catch (err) {
+    const { message } = networkErrorToCode(err, opts?.signal?.aborted === true);
+    const meta = AUTH_CHECKS.find((c) => c.id === 'connectivity');
+    return {
+      model: target.model,
+      protocol: target.protocol,
+      score: null,
+      verdict: 'unknown',
+      checks: [{
+        id: 'connectivity',
+        name: meta?.name ?? '连通性',
+        passed: null,
+        weight: meta?.weight ?? 0,
+        detail: `检测过程内部错误（已兜底）：${redactThenTruncate(message, target.apiKey, 200)}`,
+      }],
+      durationMs: 0,
+    };
+  }
+}
+
+async function probeAuthenticityImpl(
+  target: ProbeTarget,
+  hint: CatalogHint | null,
+  opts?: ProbeOptions & { quick?: boolean; totalBudgetMs?: number },
 ): Promise<AuthenticityResult> {
   const startedAll = Date.now();
   const quick = opts?.quick === true;
+  // 总 deadline：quick 模式无论 timeoutMs 传什么都强制 60s 上限
+  const budgetMs = quick
+    ? Math.min(opts?.totalBudgetMs ?? QUICK_TOTAL_BUDGET_MS, QUICK_TOTAL_BUDGET_MS)
+    : (opts?.totalBudgetMs ?? DEFAULT_TOTAL_BUDGET_MS);
+  const deadline = startedAll + budgetMs;
+  // 组合 AbortSignal：DNS、所有子请求、读取流、重试退避共享剩余预算；
+  // 与外部传入 signal 取 any（任一触发即中止）
+  const budgetSignal = AbortSignal.timeout(budgetMs);
+  const combinedSignal = opts?.signal ? AbortSignal.any([opts.signal, budgetSignal]) : budgetSignal;
+  const budgetOpts: ProbeOptions = { ...opts, signal: combinedSignal };
   const vendor = vendorFromModelOrHint(target, hint);
   const checks: AuthenticityCheck[] = [];
   const captures: ProtocolCapture[] = [];
+  /** 预算是否已耗尽（signal 触发或超 deadline） */
+  const budgetExhausted = (): boolean => combinedSignal.aborted || Date.now() >= deadline;
+  /** 把尚未生成的检查批量标记为未执行（临时错误 / 预算耗尽两种 reason） */
+  const markRemainingSkipped = (reason: 'transient' | 'budget'): void => {
+    const allIds: AuthenticityCheckId[] = ['connectivity', 'model_echo', 'response_shape', 'token_count', 'knowledge', 'reasoning', 'capability', 'speed'];
+    const pending = allIds.filter((id) => !checks.some((c) => c.id === id));
+    for (const id of pending) {
+      const meta = AUTH_CHECKS.find((c) => c.id === id);
+      checks.push({
+        id,
+        name: meta?.name ?? id,
+        passed: null,
+        weight: meta?.weight ?? 0,
+        detail: reason === 'budget' ? '检测时间预算耗尽，本项未执行' : '基准请求因上游临时错误未获得有效响应，本项未计分',
+      });
+    }
+  };
 
   // ---- 1. 连通性 + 基准请求（token_count + model_echo + response_shape 数据源）----
   const benchPayload: StreamRequestPayload = {
@@ -626,7 +775,7 @@ export async function probeAuthenticity(
     ],
     maxTokens: 300,
   };
-  const bench = await doStreamCaptureWithRetry(target, opts, benchPayload);
+  const bench = await doStreamCaptureWithRetry(target, budgetOpts, benchPayload);
   captures.push(bench.capture);
 
   // connectivity（10）：临时错误（重试后仍 429/5xx/超时）→ null 不计分，
@@ -634,27 +783,17 @@ export async function probeAuthenticity(
   const benchTransientFail = !bench.result.success && isTransientErrorCode(bench.result.errorCode);
   const connectivityOutcome = buildConnectivityOutcome(bench, benchTransientFail, target.apiKey);
   checks.push(makeCheck('connectivity', connectivityOutcome));
-  if (benchTransientFail) {
-    // 基准请求是后续检查的数据源：临时错误时后续检查全部未执行 → 权重不足判 unknown
+  if (benchTransientFail || budgetExhausted()) {
+    // 基准请求是后续检查的数据源：临时错误 / 预算耗尽时后续检查全部未执行 → 权重不足判 unknown
     const score = null;
     const executedWeight = 10; // 只有 connectivity 权重 10，但 passed=null 不计入
-    const earlyChecks: AuthenticityCheck[] = checks;
-    for (const id of ['model_echo', 'response_shape', 'token_count', 'knowledge', 'reasoning', 'capability', 'speed'] as AuthenticityCheckId[]) {
-      const meta = AUTH_CHECKS.find((c) => c.id === id);
-      earlyChecks.push({
-        id,
-        name: meta?.name ?? id,
-        passed: null,
-        weight: meta?.weight ?? 0,
-        detail: '基准请求因上游临时错误未获得有效响应，本项未计分',
-      });
-    }
+    markRemainingSkipped(benchTransientFail ? 'transient' : 'budget');
     return {
       model: target.model,
       protocol: target.protocol,
       score,
       verdict: verdictFromScore(score, executedWeight),
-      checks: earlyChecks,
+      checks,
       durationMs: Date.now() - startedAll,
     };
   }
@@ -696,7 +835,11 @@ export async function probeAuthenticity(
     ],
     maxTokens: 512,
   };
-  const bench2 = await doStreamCaptureWithRetry(target, opts, bench2Payload);
+  if (budgetExhausted()) {
+    markRemainingSkipped('budget');
+    // 走到评分统一出口
+  } else {
+  const bench2 = await doStreamCaptureWithRetry(target, budgetOpts, bench2Payload);
   captures.push(bench2.capture);
   const bench2xPayload: StreamRequestPayload = {
     model: target.model,
@@ -706,7 +849,7 @@ export async function probeAuthenticity(
     ],
     maxTokens: 512,
   };
-  const bench2x = await doStreamCaptureWithRetry(target, opts, bench2xPayload);
+  const bench2x = await doStreamCaptureWithRetry(target, budgetOpts, bench2xPayload);
   captures.push(bench2x.capture);
   const tokenTransient = (!bench2.result.success && isTransientErrorCode(bench2.result.errorCode))
     || (!bench2x.result.success && isTransientErrorCode(bench2x.result.errorCode));
@@ -726,26 +869,38 @@ export async function probeAuthenticity(
       source: tokenCheckDiff.source,
     },
   }));
+  } // end token_count budget guard
 
   // knowledge（10）：基于第一个基准请求的回复文本（要求自我介绍）
   checks.push(makeCheck('knowledge', checkKnowledge(bench.capture.text, vendorSlug)));
 
-  // reasoning（20）：3 道题
-  const reasoningBudget = quick ? 20_000 : 60_000;
-  const reasoning = await runReasoningChecks(target, opts, hint, reasoningBudget);
-  checks.push(reasoning.check);
+  // reasoning（20）：3 道题（预算检查在函数内部逐题进行）
+  if (!budgetExhausted()) {
+    const remainingBudget = Math.max(1, deadline - Date.now());
+    const reasoningBudget = Math.min(quick ? 20_000 : 60_000, remainingBudget);
+    const reasoning = await runReasoningChecks(target, budgetOpts, hint, reasoningBudget);
+    checks.push(reasoning.check);
+  } else {
+    const meta = AUTH_CHECKS.find((c) => c.id === 'reasoning');
+    checks.push({ id: 'reasoning', name: meta?.name ?? 'reasoning', passed: null, weight: meta?.weight ?? 0, detail: '检测时间预算耗尽，本项未执行' });
+  }
 
   // capability（10）：quick 模式跳过
   if (quick) {
     checks.push(makeCheck('capability', { passed: null, detail: '快速模式跳过 capability 检查' }));
+  } else if (budgetExhausted()) {
+    const meta = AUTH_CHECKS.find((c) => c.id === 'capability');
+    checks.push({ id: 'capability', name: meta?.name ?? 'capability', passed: null, weight: meta?.weight ?? 0, detail: '检测时间预算耗尽，本项未执行' });
   } else {
     const capPayload = capabilityPayload(target, target.protocol);
-    const cap = await doStreamCaptureWithRetry(target, { ...opts, timeoutMs: Math.min(opts?.timeoutMs ?? 30_000, 45_000) }, capPayload);
+    const cap = await doStreamCaptureWithRetry(target, { ...budgetOpts, timeoutMs: Math.min(opts?.timeoutMs ?? 30_000, 45_000) }, capPayload);
     captures.push(cap.capture);
-    if (!cap.result.success && isTransientErrorCode(cap.result.errorCode)) {
+    if (!cap.result.success && (isTransientErrorCode(cap.result.errorCode) || combinedSignal.aborted)) {
       checks.push(makeCheck('capability', {
         passed: null,
-        detail: `上游临时错误（${cap.result.errorCode}），重试 ${RETRY_MAX} 次后仍失败，本项未计分`,
+        detail: combinedSignal.aborted
+          ? '检测时间预算耗尽，本项未计分'
+          : `上游临时错误（${cap.result.errorCode}），重试 ${RETRY_MAX} 次后仍失败，本项未计分`,
       }));
     } else {
       checks.push(makeCheck('capability', checkCapability(target.protocol, cap.capture)));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { redact, redactDeep, redactWithKey } from '../src/types.js';
+import { redact, redactDeep, redactThenTruncate, redactWithKey } from '../src/types.js';
 
 /**
  * P1-2 回归：按真实 Key 精确脱敏。
@@ -113,5 +113,41 @@ describe('redact（旧格式脱敏仍可用，作为兜底）', () => {
   it('null/空串透传', () => {
     expect(redact(null)).toBeNull();
     expect(redact('')).toBe('');
+  });
+});
+
+describe('P1#1 修复：先脱敏再截断（redactThenTruncate）', () => {
+  it('审查复现用例：x.repeat(290)+LONGDUMMYSECRET... 截断边界不泄露前缀', () => {
+    // 审查报告复现：正文 290 个 x + 完整 Key，旧实现「先截断后脱敏」在 300 处截断后
+    // Key 剩 LONGDUMMYS 前缀泄露；新实现先脱敏再截断
+    const KEY = 'LONGDUMMYSECRET1234567890';
+    const body = 'x'.repeat(290) + KEY;
+    const out = redactThenTruncate(body, KEY, 300);
+    expect(out).not.toBeNull();
+    expect(out).not.toContain('LONGDUMMYS'); // 旧实现的泄露形态
+    expect(out).toContain('[REDACTED]');
+    expect(out!.length).toBeLessThanOrEqual(300);
+  });
+
+  it('脱敏占位符 [REDACTED] 不会被截断撕裂', () => {
+    const KEY = 'secret-key-abcdef123456';
+    const body = `error: ${KEY} and more text here to push length beyond limit 1234567890`;
+    const out = redactThenTruncate(body, KEY, 40);
+    expect(out!.length).toBeLessThanOrEqual(40);
+    expect(out).not.toContain(KEY);
+  });
+
+  it('长度 ≥4 的短 Key 也精确替换（<8 不再跳过）', () => {
+    expect(redactThenTruncate('rejected custom key xyz12', 'xyz12', 200)).toBe('rejected custom key [REDACTED]');
+    expect(redactThenTruncate('bad abc key', 'abc', 200)).toBe('bad abc key'); // <4 不替换
+  });
+
+  it('null 透传', () => {
+    expect(redactThenTruncate(null, 'some-key-1234', 100)).toBeNull();
+  });
+
+  it('截断后的输出仍过兜底格式脱敏', () => {
+    const out = redactThenTruncate('Bearer sk-abcdefghijklmnop1234 done', null, 100);
+    expect(out).not.toContain('sk-abcdefghijklmnop1234');
   });
 });

@@ -26,6 +26,8 @@ FROM node:22-alpine AS runner
 RUN corepack enable && corepack prepare pnpm@10.30.2 --activate
 WORKDIR /repo
 ENV NODE_ENV=production
+# 容器内必须监听 0.0.0.0（其他容器/宿主机才能访问）
+ENV API_HOST=0.0.0.0
 COPY --from=build /repo /repo
 EXPOSE 8711
 # tsx 直接跑 TS（tsx 在 api 的 devDependencies，install 已装）

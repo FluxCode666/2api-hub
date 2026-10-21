@@ -85,6 +85,16 @@ typecheck 通过；19 个测试全通过（新增 #7 去重、#5 入队复用、
 - worker 8713 健康检查监听地址（GLM-B）
 - mock-upstream 8712 监听地址（GLM-A）
 
+## 第二轮审查修复（2026-10-22，对应 docs/review/engine-review.md）
+
+| # | 修复 |
+| --- | --- |
+| 1 | 所有 Key 入口校验 ≥ 8 位（中文报错）；sanitize 门槛 ≥ 4；先替换再截断 |
+| 7 | enqueue 事务内全部查询用 tx；SET LOCAL lock_timeout/statement_timeout；15 并发回归测试通过 |
+| 8 | /verify 信号量同步占用（第一个 await 前）；进程级上限语义已在 README 说明 |
+| 9 | 额度规则收进 enqueueProbeTask（trigger=merchant+kind=authenticity 自动计入）；超限时 PATCH 照常保存但不入队，响应头 `X-Hub-Notice` 提示 |
+| Dockerfile/compose | api 加 `ENV API_HOST=0.0.0.0`；worker 加 `WORKER_HOST=0.0.0.0`；mock 加 `MOCK_HOST=0.0.0.0` |
+
 ## 已知问题 / 依赖
 
 - mock-upstream（8712）未启动时，连接测试返回 `network` 错误（符合预期）；worker 启动后 channel_stats/site_stats 会有数据。

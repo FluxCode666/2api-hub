@@ -54,8 +54,9 @@ const channelInputSchema = z.object({
   vendorSlug: z.string().max(50).nullish(),
   protocol: z.enum(['openai_chat', 'openai_responses', 'anthropic', 'gemini']),
   baseUrl: httpUrl(),
-  // 更新时 '' 归一为 undefined（契约：留空表示不修改）；创建时仍要求非空
-  apiKey: z.string().max(500).transform((v) => v === '' ? undefined : v).optional(),
+  // 更新时 '' 归一为 undefined（契约：留空表示不修改）；创建时仍要求非空；长度 ≥ 8
+  apiKey: z.string().max(500).transform((v) => v === '' ? undefined : v).optional()
+    .refine((v) => v === undefined || v.length >= 8, { message: 'API Key 长度至少 8 位' }),
   groupRatio: z.number().positive().max(1000),
   billingType: z.enum(['per_token', 'per_request', 'subscription']).optional(),
   primaryModel: z.string().min(1).max(200),
@@ -388,7 +389,7 @@ export async function merchantRoutes(app: FastifyInstance) {
     return channelToMerchant(c!, vendorRow, s.rechargeRatio, [], null, null);
   });
 
-  app.patch('/api/v1/merchant/channels/:id', async (req): Promise<MerchantChannel> => {
+  app.patch('/api/v1/merchant/channels/:id', async (req, reply): Promise<MerchantChannel> => {
     const user = await app.requireAuth(req);
     const { id } = idParam.parse(req.params);
     const { c, s } = await ownChannel(db, id, user.id);
@@ -427,9 +428,13 @@ export async function merchantRoutes(app: FastifyInstance) {
       updatedAt: new Date(),
     }).where(eq(channels.id, c.id)).returning();
 
-    // 连接相关字段变化 → 原子入队检测任务（倍率变化不触发）
+    // 连接相关字段变化 → 原子入队检测任务（倍率变化不触发；超每日额度时配置照常保存但不入队）
     if (connectionChanged && s.status === 'approved') {
-      await enqueueProbeTask(db, { channelId: c.id, kind: 'authenticity', trigger: 'merchant', requestedBy: user.id });
+      const { rateLimited } = await enqueueProbeTask(db, { channelId: c.id, kind: 'authenticity', trigger: 'merchant', requestedBy: user.id });
+      if (rateLimited) {
+        // 配置已保存，但检测任务因每日额度未入队；通过响应头告知前端
+        void reply.header('X-Hub-Notice', 'rate_limited:merchant_daily_limit');
+      }
     }
 
     const modelsMap = await loadMerchantChannelModels(db, [c.id]);
@@ -571,13 +576,13 @@ export async function merchantRoutes(app: FastifyInstance) {
     const body = z.object({ models: z.array(z.string().max(200)).max(20).optional() }).parse(req.body ?? {});
     const { c } = await ownChannel(db, id, user.id);
 
-    const { task, reused } = await enqueueProbeTask(db, {
+    const { task, reused, rateLimited } = await enqueueProbeTask(db, {
       channelId: c.id, kind: 'authenticity', trigger: 'merchant',
       payload: { models: body.models }, requestedBy: user.id,
-      checkMerchantDailyLimit: true,
     });
+    if (rateLimited) throw new HttpError(429, 'rate_limited', '每个渠道每天最多发起 3 次真伪检测');
     void reply.status(reused ? 200 : 202);
-    return task;
+    return task!;
   });
 
   // ---------- 任务状态 ----------

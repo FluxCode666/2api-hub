@@ -13,7 +13,7 @@ try {
     weights: scoringWeights(settings),
     minSamplesForScore: config.minSamplesForScore,
   });
-  console.log(`[aggregate:once] channel_stats=${result.channelStats} site_stats=${result.siteStats} duration=${result.durationMs}ms`);
+  console.log(`[aggregate:once] channel_stats=${result.channelStats} site_stats=${result.siteStats} failed=${result.failedChannels} duration=${result.durationMs}ms`);
 } finally {
   await sql.end();
 }

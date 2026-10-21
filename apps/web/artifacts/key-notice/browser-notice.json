@@ -1,0 +1,15 @@
+{
+  "siteId": 66,
+  "channelId": 130,
+  "message": "配置已保存，但今日自动检测额度已用完，本次未重新检测。",
+  "requests": [
+    {
+      "url": "/api/v1/merchant/channels/130",
+      "method": "PATCH",
+      "status": 200,
+      "notice": "rate_limited"
+    }
+  ],
+  "errors": [],
+  "overflow": false
+}
