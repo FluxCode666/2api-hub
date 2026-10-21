@@ -1,0 +1,321 @@
+{
+  "checks": [
+    {
+      "label": "admin真实登录与会话",
+      "status": "PASS",
+      "detail": "admin"
+    },
+    {
+      "label": "游客管理API返回401",
+      "status": "PASS",
+      "detail": "unauthorized"
+    },
+    {
+      "label": "普通用户管理API返回403",
+      "status": "PASS",
+      "detail": "forbidden"
+    },
+    {
+      "label": "GET /admin/overview",
+      "status": "PASS",
+      "detail": {
+        "fields": [
+          "pendingSites",
+          "sites",
+          "channels",
+          "users",
+          "probes24h",
+          "queue",
+          "recentFailures"
+        ]
+      }
+    },
+    {
+      "label": "GET /admin/sites?pageSize=100",
+      "status": "PASS",
+      "detail": {
+        "items": 15,
+        "total": 15
+      }
+    },
+    {
+      "label": "GET /admin/vendors",
+      "status": "PASS",
+      "detail": {
+        "items": 8
+      }
+    },
+    {
+      "label": "GET /admin/models?pageSize=100",
+      "status": "PASS",
+      "detail": {
+        "items": 19,
+        "total": 19
+      }
+    },
+    {
+      "label": "GET /admin/users?pageSize=100",
+      "status": "PASS",
+      "detail": {
+        "items": 3,
+        "total": 3
+      }
+    },
+    {
+      "label": "GET /admin/probe-runs?pageSize=20&success=false",
+      "status": "PASS",
+      "detail": {
+        "items": 20,
+        "total": 2832
+      }
+    },
+    {
+      "label": "GET /admin/tasks?pageSize=20",
+      "status": "PASS",
+      "detail": {
+        "items": 0,
+        "total": 0
+      }
+    },
+    {
+      "label": "GET /admin/feedback?pageSize=20",
+      "status": "PASS",
+      "detail": {
+        "items": 2,
+        "total": 2
+      }
+    },
+    {
+      "label": "GET /admin/reviews?pageSize=20",
+      "status": "PASS",
+      "detail": {
+        "items": 6,
+        "total": 6
+      }
+    },
+    {
+      "label": "GET /admin/announcements",
+      "status": "PASS",
+      "detail": {
+        "items": 2
+      }
+    },
+    {
+      "label": "GET /admin/settings",
+      "status": "PASS",
+      "detail": {
+        "fields": [
+          "probe.defaultIntervalSec",
+          "probe.concurrency",
+          "probe.perSiteConcurrency",
+          "probe.timeoutMs",
+          "authenticity.intervalHours",
+          "authenticity.merchantDailyLimit",
+          "scoring.weights",
+          "verify.hourlyLimitPerIp",
+          "site.allowRegistration",
+          "site.announcementBar"
+        ]
+      }
+    },
+    {
+      "label": "GET /admin/audit-logs?pageSize=20",
+      "status": "PASS",
+      "detail": {
+        "items": 0,
+        "total": 0
+      }
+    },
+    {
+      "label": "AdminSiteDetail真实结构与密钥掩码",
+      "status": "PASS",
+      "detail": {
+        "id": 15,
+        "channels": 1,
+        "reports": 0
+      }
+    },
+    {
+      "label": "独立厂商创建/编辑与元数据保留",
+      "status": "PASS",
+      "detail": {
+        "id": 9,
+        "metadataPreserved": true
+      }
+    },
+    {
+      "label": "独立模型创建/编辑/删除与真实分页",
+      "status": "PASS",
+      "detail": {
+        "id": 20,
+        "deleted": true
+      }
+    },
+    {
+      "label": "独立停用公告创建/编辑/删除",
+      "status": "PASS",
+      "detail": {
+        "id": 3,
+        "deleted": true
+      }
+    },
+    {
+      "label": "独立用户角色切换/封禁/恢复及实时会话",
+      "status": "PASS",
+      "detail": {
+        "id": "707c99b7-7881-42ad-9015-4b21b86a810c",
+        "roleRestored": "user",
+        "statusRestored": "active"
+      }
+    },
+    {
+      "label": "独立反馈标记已读与处理完成",
+      "status": "PASS",
+      "detail": {
+        "id": 3,
+        "status": "handled"
+      }
+    },
+    {
+      "label": "真实评分权重保存与回读",
+      "status": "PASS",
+      "detail": {
+        "written": {
+          "trust": 0.25,
+          "uptime": 0.2,
+          "latency": 0.45,
+          "stability": 0.1
+        }
+      }
+    },
+    {
+      "label": "评分权重恢复原值",
+      "status": "PASS",
+      "detail": {
+        "restored": {
+          "trust": 0.25,
+          "uptime": 0.45,
+          "latency": 0.2,
+          "stability": 0.1
+        }
+      }
+    },
+    {
+      "label": "清理独立vendor",
+      "status": "PASS",
+      "detail": {
+        "ok": true
+      }
+    },
+    {
+      "label": "独立管理操作审计日志",
+      "status": "PASS",
+      "detail": {
+        "records": 14,
+        "actorAndTargetsVerified": true
+      }
+    },
+    {
+      "label": "真实站点PATCH标识和联系方式保存",
+      "status": "RESOLVED",
+      "detail": "返回成功但字段未保存：slug,contact",
+      "resolution": "后端修复后真实API针对性复测通过"
+    },
+    {
+      "label": "真实渠道PATCH上游和模型配置保存",
+      "status": "RESOLVED",
+      "detail": "返回成功但字段未保存：baseUrl,protocol,primaryModel,backupModel,billingType,apiKey",
+      "resolution": "后端修复后真实API针对性复测通过"
+    },
+    {
+      "label": "真实管理手动探测202与任务队列",
+      "status": "PASS",
+      "detail": {
+        "id": 1,
+        "channelId": 40,
+        "status": "queued",
+        "executionNotYetVerified": true
+      }
+    },
+    {
+      "label": "修复复测：真实站点PATCH标识和联系方式保存",
+      "status": "PASS",
+      "detail": {
+        "id": 20,
+        "fieldsSaved": true
+      }
+    },
+    {
+      "label": "修复复测：真实渠道PATCH上游和模型配置保存",
+      "status": "PASS",
+      "detail": {
+        "id": 40,
+        "fieldsSaved": true
+      }
+    },
+    {
+      "label": "真实API拒绝全零评分权重并保留原值",
+      "status": "PASS",
+      "detail": {
+        "rejected": true,
+        "originalPreserved": true
+      }
+    },
+    {
+      "label": "管理渠道分组倍率变更排入真伪检测任务并恢复",
+      "status": "FAIL",
+      "detail": "GET /admin/sites/20: HTTP 404, code=not_found"
+    },
+    {
+      "label": "管理站点充值倍率变更排入模型发现任务并恢复",
+      "status": "FAIL",
+      "detail": "GET /admin/sites/20: HTTP 404, code=not_found"
+    },
+    {
+      "label": "AdminVendor官网/简介/排序/图标完整回读与清空",
+      "status": "PASS",
+      "detail": {
+        "id": 9,
+        "fullReadback": true,
+        "partialUpdatePreserved": true,
+        "explicitNullClears": true,
+        "deleted": true
+      }
+    }
+  ],
+  "resources": {
+    "prefix": "admin-integration-1792602966",
+    "userId": "707c99b7-7881-42ad-9015-4b21b86a810c",
+    "feedback": 3,
+    "siteId": 20,
+    "siteSlug": "admin-integration-site-1792603157",
+    "channelId": 40,
+    "probeTaskId": 1
+  },
+  "retained": [
+    {
+      "kind": "user",
+      "id": "707c99b7-7881-42ad-9015-4b21b86a810c",
+      "email": "admin-integration-1792602966@integration.example",
+      "reason": "无用户删除接口；测试结束保留无管理权限的独立账号"
+    },
+    {
+      "kind": "feedback",
+      "id": 3,
+      "status": "handled",
+      "reason": "反馈无删除接口；仅保留本轮独立测试数据"
+    },
+    {
+      "kind": "site-awaiting-upstream",
+      "id": 20,
+      "channelId": 40,
+      "status": "draft",
+      "probeEnabled": false,
+      "reason": "独立审核链测试草稿，等待8712；不公开且不定时探测"
+    }
+  ],
+  "generatedAt": "2026-10-21T17:14:06Z",
+  "passed": 30,
+  "failed": 2,
+  "updatedAt": "2026-10-21T17:30:38Z"
+}

@@ -1,0 +1,32 @@
+{
+  "startedAt": "2026-10-21T17:14:12.757Z",
+  "mode": "real",
+  "stage": "crud",
+  "checks": [
+    {
+      "name": "healthz",
+      "status": 200
+    },
+    {
+      "name": "seed merchant login",
+      "status": 200
+    },
+    {
+      "name": "overview/sites/catalog shapes",
+      "siteCount": 12
+    },
+    {
+      "name": "site create/read/update",
+      "siteId": 16
+    },
+    {
+      "name": "channel create/update/delete and draft delete",
+      "status": "passed"
+    }
+  ],
+  "pendingSiteId": null,
+  "pendingChannelId": null,
+  "taskId": null,
+  "completed": true,
+  "finishedAt": "2026-10-21T17:14:12.884Z"
+}

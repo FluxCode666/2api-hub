@@ -358,6 +358,12 @@ export interface Review {
 }
 export interface ReviewInput { rating: number; content: string }
 
+/** GET /me/reviews：当前用户自己的评价（含所属站点与审核状态） */
+export interface MyReview extends Review {
+  status: ReviewStatus;
+  site: { id: number; slug: string; name: string };
+}
+
 // ---------- home ----------
 export interface RankingOverview {
   updatedAt: string | null;
@@ -603,6 +609,13 @@ export interface ModelInput {
   isFeatured?: boolean;
   sortOrder?: number;
   isActive?: boolean;
+}
+
+/** GET /admin/vendors 返回 AdminVendor[] */
+export interface AdminVendor extends VendorSummary {
+  website: string | null;
+  description: string | null;
+  sortOrder: number;
 }
 
 export interface AdminModel extends ModelDetail {

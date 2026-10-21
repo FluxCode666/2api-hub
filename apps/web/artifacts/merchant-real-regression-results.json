@@ -1,0 +1,92 @@
+{
+  "startedAt": "2026-10-21T17:16:17.460Z",
+  "mode": "real",
+  "checks": [
+    {
+      "name": "seed site report serialization",
+      "siteCount": 12,
+      "reportCount": 32,
+      "status": "passed"
+    },
+    {
+      "name": "model upsert preserves ID and existing status",
+      "channelId": 38,
+      "modelId": 88,
+      "status": "passed",
+      "limitation": "新建模型的探测状态与可信分为空；非空历史值保留待 worker 数据回归"
+    },
+    {
+      "name": "unavailable upstream connection result",
+      "success": false,
+      "errorCode": "network",
+      "status": "passed"
+    },
+    {
+      "name": "key edit resets previous failed test",
+      "lastTestOk": null,
+      "status": "passed",
+      "limitation": "此前成功状态失效待 8712 健康后回归"
+    },
+    {
+      "name": "authenticated real web route",
+      "path": "/merchant",
+      "status": 200
+    },
+    {
+      "name": "authenticated real web route",
+      "path": "/merchant/sites",
+      "status": 200
+    },
+    {
+      "name": "authenticated real web route",
+      "path": "/merchant/onboarding",
+      "status": 200
+    },
+    {
+      "name": "authenticated real web route",
+      "path": "/merchant/sites/4",
+      "status": 200
+    },
+    {
+      "name": "authenticated real web route",
+      "path": "/merchant/sites/4/edit",
+      "status": 200
+    },
+    {
+      "name": "authenticated real web route",
+      "path": "/merchant/channels/10",
+      "status": 200
+    },
+    {
+      "name": "cleanup regression draft",
+      "siteId": 18,
+      "status": "passed"
+    },
+    {
+      "name": "seed model unchanged save preserves nonempty historical fields",
+      "channelId": 10,
+      "modelCount": 3,
+      "fields": [
+        "id",
+        "modelSlug",
+        "priceOverrideInput",
+        "priceOverrideOutput",
+        "lastStatus",
+        "lastLatencyMs",
+        "lastTestedAt",
+        "lastError",
+        "trustScore",
+        "trustVerdict"
+      ],
+      "status": "passed"
+    },
+    {
+      "name": "submit preconditions",
+      "withoutChannel": 400,
+      "withoutSuccessfulTest": 400,
+      "status": "passed"
+    }
+  ],
+  "completed": true,
+  "finishedAt": "2026-10-21T17:18:14.396Z"
+}

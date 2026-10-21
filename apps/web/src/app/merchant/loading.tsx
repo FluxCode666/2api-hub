@@ -1,0 +1,1 @@
+export default function Loading() { return <div className="stack" role="status" aria-label="正在加载站长后台"><div className="merchant-loading" /><div className="merchant-loading" /><span className="muted">正在加载站点数据…</span></div>; }

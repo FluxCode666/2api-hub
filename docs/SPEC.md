@@ -263,6 +263,8 @@ API Key 使用 AES-256-GCM 加密存储（`APP_ENCRYPTION_KEY`，格式 `v1:<iv 
 | POST | `/me/favorites/:channelId` | 收藏 |
 | DELETE | `/me/favorites/:channelId` | 取消收藏 |
 | POST | `/sites/:slug/reviews` | `{ rating 1-5, content }` 每用户每站点 1 条（再次提交为更新） |
+| GET | `/me/reviews` | 我的评价（分页）`Paginated<MyReview>` |
+| DELETE | `/me/reviews/:id` | 删除自己的评价 |
 | GET | `/me/notifications` | 站内通知 |
 | POST | `/me/notifications/read` | `{ ids?: number[] }` 全部或部分已读 |
 
@@ -382,7 +384,8 @@ API Key 使用 AES-256-GCM 加密存储（`APP_ENCRYPTION_KEY`，格式 `v1:<iv 
 1. **目录所有权**（只改自己负责的目录）：
    - Codex（前端）：`apps/web/**`
    - Kimi（后端）：`apps/api/**`、`packages/db/**`（`schema.ts` / `client.ts` / `crypto.ts` 除外，见第 2 条）
-   - GLM（检测引擎）：`packages/probe/**`、`apps/worker/**`、`apps/mock-upstream/**`
+   - GLM-A（检测引擎）：`packages/probe/**`、`apps/mock-upstream/**`
+   - GLM-B（Worker）：`apps/worker/**`
 2. **契约文件**：`docs/SPEC.md`、`packages/shared/**`、`packages/db/src/schema.ts`、`client.ts`、`crypto.ts` 由编排者维护。确有必要时**只允许做向后兼容的增量修改**（新增可选字段/新类型/新索引），并在 `docs/CONTRACT-CHANGES.md` 追加一条记录（谁、改了什么、为什么）。禁止删除或重命名已有字段。
 3. **不要执行 git commit / reset / checkout / stash**，由编排者统一提交。
 4. 加依赖用 `pnpm --filter <包名> add <dep>`；遇到 lockfile 冲突稍后重试，不要删除 `pnpm-lock.yaml` 或根 `node_modules`。
