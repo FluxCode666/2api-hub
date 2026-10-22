@@ -1,3 +1,4 @@
+import { toTrustReportBrief } from '@/lib/trust-report';
 import { priceCny, type ChannelDetail, type ChannelStatsView, type MerchantChannel, type ModelDetail, type SiteDetail, type VendorSummary } from '@hub/shared';
 import { getMockAdminModels, getMockAdminVendors } from './admin';
 import { getMockMerchantSites } from './merchant';
@@ -32,7 +33,7 @@ function publicChannel(channel: MerchantChannel, site: SiteDetail): ChannelDetai
       inputCny: primary.inputPriceCny, outputCny: primary.outputPriceCny,
       isOverride: primaryMerchant?.priceOverrideInput != null || primaryMerchant?.priceOverrideOutput != null } : null,
     modelCount: models.length, models, stats: channel.stats ?? { ...emptyStats, trustScore: channel.latestReport?.score ?? null, trustVerdict: channel.latestReport?.verdict ?? 'unknown' }, isFavorite: false,
-    primaryModel: channel.primaryModel, backupModel: channel.backupModel, latestReport: channel.latestReport, createdAt: channel.createdAt,
+    primaryModel: channel.primaryModel, backupModel: channel.backupModel, trustReport: toTrustReportBrief(channel.latestReport), latestReport: channel.latestReport, createdAt: channel.createdAt,
   };
 }
 

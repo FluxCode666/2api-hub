@@ -148,6 +148,21 @@ export interface ChannelPrice {
   isOverride: boolean;       // 是否为站长手填价
 }
 
+/** 列表中可信分悬浮卡片使用的检测摘要（不含说明文字，完整报告见渠道详情） */
+export interface TrustCheckBrief {
+  id: AuthenticityCheckId;
+  passed: boolean | null;      // null = 未执行/未计分
+  score?: number;              // 0-1 部分得分（如推理题 2/3）
+}
+export interface TrustReportBrief {
+  id: number;
+  model: string;               // 检测的上游模型名（主测模型）
+  score: number | null;
+  verdict: TrustVerdict;
+  checkedAt: string;
+  checks: TrustCheckBrief[];
+}
+
 export interface ChannelListItem {
   id: number;
   rank: number;                  // 当前排序下的名次（从 1 开始，跨分页连续）
@@ -165,6 +180,7 @@ export interface ChannelListItem {
   modelCount: number;
   models: ChannelModelBrief[];
   stats: ChannelStatsView;
+  trustReport: TrustReportBrief | null; // 主测模型最近一次真伪检测摘要（与 stats.trustScore 同源）
   isFavorite: boolean;           // 未登录恒为 false
 }
 

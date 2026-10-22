@@ -72,3 +72,10 @@ shadcn 的 accent 是交互悬停底色，和品牌 primary 含义不同；muted
 内容最大宽 1320px，桌面边距 48px、移动 20px。品牌区块纵向 120–160px，数据页紧凑。榜单标题与副标题同排，筛选紧凑、更多条件折叠；数字 tabular-nums，行高 68px，表头 sticky 于导航下方。手机改卡片，表格不得撑宽文档。
 
 管理渠道直接使用 `/admin/channels` 服务端分页；支持状态、厂商、协议、站点、关键词与问题渠道快捷筛选。排查排序明确标注「可用率从低到高 / 可信分从低到高 / 连续失败最多」。
+## 模型可信分检测摘要（2026-10-22）
+
+- `TrustBadge` 共用 shadcn HoverCard（150ms 打开、180ms 关闭）；触屏使用 Popover 点按开关，移动触发区至少 44px 高。卡片宽 320px，边缘预留 12px，空间不足时内容可滚动。
+- 直接使用 `@hub/shared` 的 `TrustReportBrief`；后台完整报告经 `toTrustReportBrief` 映射。按 `AUTH_CHECKS` 顺序、`AUTH_CHECK_NAME` 中文名和共享权重展示八项结果，部分分显示细进度条及百分比。
+- 真模型/通过使用 success，存疑判定使用 warning，疑似假模型/未通过使用 danger，未计分使用 unknown。图标和中文状态同时展示；品牌 primary 仅用于完整报告链接。
+- 未计分明确解释为「上游临时错误或不适用，不计入得分」；null 报告显示检测机制与尚未完成提示。卡片说明已执行权重归一化公式及部分分按比例计入。
+- 徽章可键盘聚焦，`aria-describedby` 提供逐项状态，Escape 关闭，向下键可聚焦报告链接。报告区为 `#report`、`scroll-mt-24`。报告正文及 AccordionTrigger 内使用静态 `TrustStatus`，避免嵌套按钮；渠道卡片改为标题与详情链接，给可信分保留独立操作区。

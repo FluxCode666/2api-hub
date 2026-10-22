@@ -1,0 +1,181 @@
+{
+  "apiOrigin": "http://127.0.0.1:8711",
+  "webOrigin": "http://127.0.0.1:3210",
+  "writes": false,
+  "retainedAccount": false,
+  "generatedAt": "2026-10-22T08:03:42.099Z",
+  "blocked": false,
+  "passed": 26,
+  "failed": 0,
+  "skipped": 2,
+  "checks": [
+    {
+      "label": "真实 API /healthz",
+      "status": "PASS",
+      "ms": 21,
+      "detail": ""
+    },
+    {
+      "label": "公开 /meta /vendors /models 与共享契约",
+      "status": "PASS",
+      "ms": 64,
+      "detail": ""
+    },
+    {
+      "label": "公开站点列表分页与契约",
+      "status": "PASS",
+      "ms": 17,
+      "detail": ""
+    },
+    {
+      "label": "渠道契约、倍率公式与连续排名",
+      "status": "PASS",
+      "ms": 45,
+      "detail": ""
+    },
+    {
+      "label": "公开站点详情与评价分页",
+      "status": "PASS",
+      "ms": 27,
+      "detail": ""
+    },
+    {
+      "label": "stableOnly=true 稳定性筛选",
+      "status": "PASS",
+      "ms": 15,
+      "detail": ""
+    },
+    {
+      "label": "stableOnly=false 不应开启稳定筛选",
+      "status": "PASS",
+      "ms": 15,
+      "detail": ""
+    },
+    {
+      "label": "featured=false 不应只返回精选模型",
+      "status": "PASS",
+      "ms": 6,
+      "detail": ""
+    },
+    {
+      "label": "模型厂商/关键词筛选",
+      "status": "PASS",
+      "ms": 11,
+      "detail": ""
+    },
+    {
+      "label": "渠道详情与检测报告契约",
+      "status": "PASS",
+      "ms": 21,
+      "detail": ""
+    },
+    {
+      "label": "渠道站点/厂商/关键词/协议/倍率/阈值组合筛选",
+      "status": "PASS",
+      "ms": 12,
+      "detail": ""
+    },
+    {
+      "label": "渠道 history 1h",
+      "status": "PASS",
+      "ms": 9,
+      "detail": ""
+    },
+    {
+      "label": "渠道 history 24h",
+      "status": "PASS",
+      "ms": 7,
+      "detail": ""
+    },
+    {
+      "label": "渠道 history 7d",
+      "status": "PASS",
+      "ms": 7,
+      "detail": ""
+    },
+    {
+      "label": "渠道 history 30d",
+      "status": "PASS",
+      "ms": 7,
+      "detail": ""
+    },
+    {
+      "label": "公开探测日志服务端分页、失败筛选与标准错误",
+      "status": "PASS",
+      "ms": 52,
+      "detail": ""
+    },
+    {
+      "label": "按 ids 批量对比",
+      "status": "PASS",
+      "ms": 8,
+      "detail": ""
+    },
+    {
+      "label": "/go/:channelId 返回 302 与站点地址",
+      "status": "PASS",
+      "ms": 3,
+      "detail": ""
+    },
+    {
+      "label": "指定模型报价、价格升序与 null 最后",
+      "status": "PASS",
+      "ms": 9,
+      "detail": ""
+    },
+    {
+      "label": "首页 Top3 与启用公告",
+      "status": "PASS",
+      "ms": 33,
+      "detail": ""
+    },
+    {
+      "label": "公开校验失败与标准错误结构",
+      "status": "PASS",
+      "ms": 11,
+      "detail": ""
+    },
+    {
+      "label": "游客认证/收藏/个人评价/通知均 401",
+      "status": "PASS",
+      "ms": 9,
+      "detail": ""
+    },
+    {
+      "label": "真实登录 Cookie、会话、用户接口与 admin 403",
+      "status": "PASS",
+      "ms": 159,
+      "detail": ""
+    },
+    {
+      "label": "个人收藏服务端分页与跨页连续排名",
+      "status": "PASS",
+      "ms": 54,
+      "detail": ""
+    },
+    {
+      "label": "站内通知服务端分页、全局未读数与输入校验",
+      "status": "PASS",
+      "ms": 36,
+      "detail": ""
+    },
+    {
+      "label": "用户写入与 MyReview CRUD",
+      "status": "SKIP",
+      "ms": 0,
+      "detail": "设置 HUB_INTEGRATION_WRITES=1 执行"
+    },
+    {
+      "label": "Next 同源 API 代理与真实 Cookie",
+      "status": "PASS",
+      "ms": 71,
+      "detail": ""
+    },
+    {
+      "label": "实际快速鉴定",
+      "status": "SKIP",
+      "ms": 0,
+      "detail": "未提供 HUB_VERIFY_BASE_URL / HUB_VERIFY_API_KEY / HUB_VERIFY_MODEL，仅检查了输入校验"
+    }
+  ]
+}

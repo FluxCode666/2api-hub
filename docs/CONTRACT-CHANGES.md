@@ -49,3 +49,7 @@
 ## 2026-10-22 新增管理端渠道分页接口 —— 编排者
 
 > 新增 `AdminChannel extends MerchantChannel { site }` 与 `GET /admin/channels` → `Paginated<AdminChannel>`，替代前端「汇总全部站点详情后客户端分页」的做法。由 Kimi 实现，Codex 接入。
+
+## 2026-10-22 列表项附带可信分检测摘要 —— 编排者
+
+> 新增 `TrustCheckBrief`、`TrustReportBrief`，`ChannelListItem` 新增 `trustReport: TrustReportBrief | null`（`ChannelDetail` 随之继承）。取值规则与 worker 计算 `channel_stats.trust_score` 一致：该渠道 `model = primary_model` 的最近一次 `authenticity_reports`。用于可信分徽章悬浮展示检测项。由 Kimi（API）与 Codex（前端）实施。

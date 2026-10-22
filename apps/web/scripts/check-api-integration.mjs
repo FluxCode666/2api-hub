@@ -57,6 +57,18 @@ function channel(value) {
   if (value.vendor !== null) vendor(value.vendor);
   if (value.price !== null) shape(value.price, { modelSlug: 'string', upstreamName: 'string', inputCny: 'number?', outputCny: 'number?', isOverride: 'boolean' }, 'price');
   value.models.forEach(item => shape(item, { upstreamName: 'string', modelSlug: 'string?', displayName: 'string?', vendorSlug: 'string?', lastStatus: 'string', trustScore: 'number?', trustVerdict: 'string' }, 'channel.models'));
+  assert('trustReport' in value, '渠道缺少 trustReport 字段');
+  if (value.trustReport !== null) {
+    const report = value.trustReport;
+    shape(report, { id: 'number', model: 'string', score: 'number?', verdict: 'string', checkedAt: 'iso', checks: 'array' }, 'trustReport');
+    assert.equal(report.score, value.stats.trustScore, '摘要与统计可信分不同源');
+    assert.equal(report.verdict, value.stats.trustVerdict, '摘要与统计判定不同源');
+    for (const check of report.checks) {
+      assert(['connectivity', 'model_echo', 'response_shape', 'token_count', 'knowledge', 'reasoning', 'capability', 'speed'].includes(check.id), '检测项标识不合法');
+      assert([true, false, null].includes(check.passed), '检测状态必须为 boolean|null');
+      assert(check.score === undefined || typeof check.score === 'number' && check.score >= 0 && check.score <= 1, '部分得分必须在 0–1');
+    }
+  }
   stats(value.stats);
 }
 function site(value) {

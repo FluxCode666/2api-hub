@@ -1,3 +1,4 @@
+import { toTrustReportBrief } from '@/lib/trust-report';
 import {
   AUTH_CHECKS, SEED_MODELS, SEED_VENDORS, computeRecommendScore, priceCny,
   type Announcement, type AuthenticityReport, type ChannelDetail, type ChannelStatsView,
@@ -93,6 +94,14 @@ export const mockChannels: ChannelDetail[] = Array.from({ length: 36 }, (_, inde
       passed: stats.trustScore === 100 || (stats.trustScore === 85 ? check.id !== 'response_shape' : checkIndex < Math.ceil((stats.trustScore ?? 0) / 13)),
       detail: `演示检查：${check.description}。${stats.trustScore !== null && stats.trustScore < 80 ? '部分指标存在差异，建议结合完整报告评估。' : '结果符合目录预期。'}` })),
   };
+  if (report?.verdict === 'suspect') {
+    // 展示部分得分与不适用项，演示数据的总分与检查权重保持一致。
+    report.checks = report.checks.map(check => ({ ...check, passed: check.id === 'knowledge' ? null : !['token_count', 'reasoning'].includes(check.id), ...(check.id === 'reasoning' ? { score: 2 / 3 } : {}) }));
+    const executed = report.checks.filter(check => check.passed !== null);
+    report.score = Math.round(executed.reduce((sum, check) => sum + check.weight * (check.score ?? (check.passed ? 1 : 0)), 0) / executed.reduce((sum, check) => sum + check.weight, 0) * 100);
+    stats.trustScore = report.score;
+    stats.recommendScore = computeRecommendScore(stats);
+  }
   return {
     id: index + 1, rank: index + 1, name: `${vendor.name} ${index % 3 === 0 ? '优选直连' : index % 3 === 1 ? '标准分组' : '高性价比'}`,
     description: `${vendor.name} 模型分组，按 Token 计费。此渠道为演示数据。`,
@@ -108,7 +117,7 @@ export const mockChannels: ChannelDetail[] = Array.from({ length: 36 }, (_, inde
       lastLatencyMs: stats.latencyP50, lastTestedAt: stats.lastProbeAt, lastError: stats.uptime24h === 0 ? '上游返回 503' : null,
       inputPriceCny: priceCny(model.officialInputPrice, ratio), outputPriceCny: priceCny(model.officialOutputPrice, ratio),
     })), stats, isFavorite: false, primaryModel: primary.slug, backupModel: models.find((model) => model.slug !== primary.slug)?.slug ?? null,
-    latestReport: report, createdAt: site.createdAt,
+    trustReport: toTrustReportBrief(report), latestReport: report, createdAt: site.createdAt,
   };
 });
 

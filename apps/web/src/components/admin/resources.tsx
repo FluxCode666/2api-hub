@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 import { PencilSimpleIcon, SpinnerGapIcon } from '@phosphor-icons/react';
 import type { AdminOverview, AdminSite, AdminChannel, AdminUser, FeedbackItem, AdminReview, AuditLog, MerchantChannel, ChannelInput, ProbeRun, ProbeTask, Role, UserStatus, ProbeKind } from '@hub/shared';
 import { PROTOCOL_LABELS } from '@hub/shared';
+import { TrustBadge } from '@/components/trust-badge';
+import { toTrustReportBrief } from '@/lib/trust-report';
 import { apiWithHeaders, apiNoticeMessage } from '@/lib/api/client';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -60,7 +62,7 @@ export function ChannelsTable({ items }: { items: AdminChannel[] }) {
     { label: '站点 / 渠道', render: item => <><RecordLink href={`/admin/sites/${item.site.id}`}>{item.site.name}</RecordLink><div><RecordLink href={`/channels/${item.id}`}>{item.name}</RecordLink></div><div className="font-mono text-xs tabular-nums text-muted-foreground">#{item.id} · <Status value={item.site.status} /></div></> },
     { label: '模型 / 协议', render: item => <><div>{item.primaryModel}</div><div className="text-xs text-muted-foreground">{PROTOCOL_LABELS[item.protocol]}</div></> },
     { label: '状态', render: item => <Status value={item.status} /> },
-    { label: '可用率 / 可信分', render: item => <span className="font-mono tabular-nums">{item.stats?.uptime24h == null ? '—' : `${(item.stats.uptime24h * 100).toFixed(1)}%`} / {item.stats?.trustScore ?? '—'}</span> },
+    { label: '可用率 / 可信分', render: item => <div className="space-y-2"><span className="font-mono tabular-nums">{item.stats?.uptime24h == null ? '—' : `${(item.stats.uptime24h * 100).toFixed(1)}%`}</span><div><TrustBadge score={item.stats?.trustScore ?? null} verdict={item.stats?.trustVerdict ?? 'unknown'} report={toTrustReportBrief(item.latestReport)} channelId={item.id} /></div></div> },
     { label: '连续失败', render: item => <span className={`font-mono tabular-nums ${(item.stats?.consecutiveFailures ?? 0) > 0 ? 'text-danger' : 'text-muted-foreground'}`}>{item.stats?.consecutiveFailures ?? 0} 次</span> },
     { label: '探测配置', render: item => <span className="font-mono tabular-nums">{item.probeEnabled ? `${item.probeIntervalSec}s` : '已暂停'}</span> },
     { label: '操作', render: item => <div style={actionRowStyle}><ChannelEditor key={item.updatedAt} item={item} />{(['availability', 'authenticity', 'discovery'] as ProbeKind[]).map(kind => <MutationButton key={kind} path={`/admin/channels/${item.id}/probe`} method="POST" body={{ kind }}>{kind === 'availability' ? '探测' : kind === 'authenticity' ? '真伪检测' : '获取模型'}</MutationButton>)}<RecordLink href={`/admin/probe-runs?channelId=${item.id}`}>日志</RecordLink></div> },

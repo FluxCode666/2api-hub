@@ -1,0 +1,146 @@
+[
+  {
+    "channelId": 10,
+    "primaryModel": "claude-fable-5-1",
+    "statsScore": 100,
+    "idType": "number",
+    "trustReport": {
+      "id": 76,
+      "model": "claude-fable-5-1",
+      "score": 100,
+      "verdict": "genuine",
+      "checkedAt": "2026-10-22T02:33:48.818Z",
+      "checks": [
+        {
+          "id": "connectivity",
+          "passed": true
+        },
+        {
+          "id": "model_echo",
+          "passed": true
+        },
+        {
+          "id": "response_shape",
+          "passed": true
+        },
+        {
+          "id": "token_count",
+          "passed": true
+        },
+        {
+          "id": "knowledge",
+          "passed": true
+        },
+        {
+          "id": "reasoning",
+          "passed": true,
+          "score": 1
+        },
+        {
+          "id": "capability",
+          "passed": true
+        },
+        {
+          "id": "speed",
+          "passed": true
+        }
+      ]
+    }
+  },
+  {
+    "channelId": 15,
+    "primaryModel": "claude-fable-5-1",
+    "statsScore": 63,
+    "idType": "number",
+    "trustReport": {
+      "id": 66,
+      "model": "claude-fable-5-1",
+      "score": 63,
+      "verdict": "suspect",
+      "checkedAt": "2026-10-21T19:53:51.481Z",
+      "checks": [
+        {
+          "id": "connectivity",
+          "passed": true
+        },
+        {
+          "id": "model_echo",
+          "passed": true
+        },
+        {
+          "id": "response_shape",
+          "passed": true
+        },
+        {
+          "id": "token_count",
+          "passed": false
+        },
+        {
+          "id": "knowledge",
+          "passed": true
+        },
+        {
+          "id": "reasoning",
+          "passed": false,
+          "score": 0.6666666666666666
+        },
+        {
+          "id": "capability",
+          "passed": false
+        },
+        {
+          "id": "speed",
+          "passed": true
+        }
+      ]
+    }
+  },
+  {
+    "channelId": 23,
+    "primaryModel": "claude-fable-5-1",
+    "statsScore": 25,
+    "idType": "number",
+    "trustReport": {
+      "id": 68,
+      "model": "claude-fable-5-1",
+      "score": 25,
+      "verdict": "fake",
+      "checkedAt": "2026-10-21T20:03:47.323Z",
+      "checks": [
+        {
+          "id": "connectivity",
+          "passed": true
+        },
+        {
+          "id": "model_echo",
+          "passed": false
+        },
+        {
+          "id": "response_shape",
+          "passed": false
+        },
+        {
+          "id": "token_count",
+          "passed": null
+        },
+        {
+          "id": "knowledge",
+          "passed": true
+        },
+        {
+          "id": "reasoning",
+          "passed": false,
+          "score": 0
+        },
+        {
+          "id": "capability",
+          "passed": false
+        },
+        {
+          "id": "speed",
+          "passed": false
+        }
+      ]
+    }
+  }
+]

@@ -9,7 +9,7 @@ import { channelModels, favorites, models, vendors } from '@hub/db';
 import type { Database } from '@hub/db';
 import type {
   ChannelListItem, ChannelModelBrief, ChannelPrice, ChannelQuery, ChannelSort,
-  SiteRef, TrustVerdict,
+  SiteRef, TrustCheckBrief, TrustReportBrief, TrustVerdict,
 } from '@hub/shared';
 import { DEFAULT_SORT_ORDER, actualRatio, priceCny, STABLE_MIN_SAMPLES, STABLE_MIN_UPTIME } from '@hub/shared';
 import { channelStatsView, vendorRef } from './serialize';
@@ -192,6 +192,7 @@ export async function queryChannels(
 
   const channelIds = rows.map((r) => r.id);
   const modelsBrief = await loadModelsBrief(db, channelIds);
+  const trustReports = await loadTrustReportBriefs(db, channelIds);
   const favSet = currentUserId && channelIds.length > 0
     ? new Set(
         (await db.select({ channelId: favorites.channelId }).from(favorites)
@@ -237,6 +238,7 @@ export async function queryChannels(
       price,
       modelCount: r.model_count,
       models: modelsBrief.get(r.id) ?? [],
+      trustReport: trustReports.get(r.id) ?? null,
       stats: channelStatsView(statsRowFrom(r)),
       isFavorite: favSet.has(r.id),
     };
@@ -272,6 +274,36 @@ function statsRowFrom(r: ListRow): ChannelStatsRow | null {
     sparkline: (r.sparkline ?? []) as ChannelStatsRow['sparkline'],
     updatedAt: new Date(0),
   };
+}
+
+/** 批量获取主测模型最近一次真伪检测摘要（与 worker 计算 channel_stats.trust_score 同源：DISTINCT ON + model=primary_model） */
+async function loadTrustReportBriefs(db: Database, channelIds: number[]): Promise<Map<number, TrustReportBrief>> {
+  const map = new Map<number, TrustReportBrief>();
+  if (channelIds.length === 0) return map;
+  const rows = await db.execute<Record<string, unknown>>(sql`
+    SELECT DISTINCT ON (ar.channel_id)
+      ar.channel_id, ar.id::int AS report_id, ar.model, ar.score, ar.verdict, ar.checks, ar.created_at
+    FROM authenticity_reports ar
+    JOIN channels c2 ON c2.id = ar.channel_id
+    WHERE ar.channel_id IN (${sql.join(channelIds.map((x) => sql`${x}`), sql`, `)})
+      AND ar.model = c2.primary_model
+    ORDER BY ar.channel_id, ar.created_at DESC, ar.id DESC`);
+  for (const r of rows) {
+    const checks = (r['checks'] as { id: string; passed: boolean | null; score?: number }[]).map((c) => ({
+      id: c.id as TrustCheckBrief['id'],
+      passed: c.passed,
+      ...(c.score !== undefined ? { score: c.score } : {}),
+    }));
+    map.set(r['channel_id'] as number, {
+      id: r['report_id'] as number,
+      model: r['model'] as string,
+      score: r['score'] as number | null,
+      verdict: r['verdict'] as TrustReportBrief['verdict'],
+      checkedAt: new Date(r['created_at'] as string).toISOString(),
+      checks,
+    });
+  }
+  return map;
 }
 
 /** 批量加载渠道的声明模型（含目录映射与厂商 slug） */

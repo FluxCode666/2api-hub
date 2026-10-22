@@ -1,0 +1,28 @@
+[
+  {
+    "path": "/",
+    "checks": 8
+  },
+  {
+    "path": "/models/claude-opus-5-5",
+    "checks": 8
+  },
+  {
+    "path": "/vendors/anthropic",
+    "checks": 8
+  },
+  {
+    "path": "/sites/xinghe-api",
+    "checks": 8,
+    "nested": 0
+  },
+  {
+    "path": "/compare?ids=1,15",
+    "checks": 8,
+    "nested": 0
+  },
+  {
+    "path": "/me",
+    "checks": 8
+  }
+]

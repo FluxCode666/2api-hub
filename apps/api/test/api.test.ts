@@ -594,6 +594,63 @@ describe('admin channels 服务端分页', () => {
   });
 });
 
+describe('trustReport 检测摘要（ChannelListItem）', () => {
+  it('有报告的渠道返回 8 项摘要且不含 detail；与详情 latestReport.score 一致', async () => {
+    // 造一条主测模型的真伪报告（8 项 checks）
+    await db.execute(sql`INSERT INTO authenticity_reports
+      (channel_id, model, protocol, score, verdict, checks, trigger, created_at)
+      VALUES (${ctx.cheap.id}, 'claude-opus-5-5', 'anthropic', 95, 'genuine',
+        ${JSON.stringify([
+          { id: 'connectivity', name: '连通性', passed: true, weight: 10, detail: '正常' },
+          { id: 'model_echo', name: '模型名回显', passed: true, weight: 10, detail: '一致' },
+          { id: 'response_shape', name: '协议特征', passed: true, weight: 15, detail: '符合' },
+          { id: 'token_count', name: 'Token 计数一致性', passed: true, weight: 20, detail: '一致' },
+          { id: 'knowledge', name: '知识与身份', passed: true, weight: 10, detail: '吻合' },
+          { id: 'reasoning', name: '推理能力', passed: true, weight: 20, detail: '全对' },
+          { id: 'capability', name: '能力特征', passed: true, weight: 10, detail: '支持' },
+          { id: 'speed', name: '输出速度', passed: true, weight: 5, detail: '合理' },
+        ])},
+        'schedule', now())`);
+
+    const res = await app.inject({ method: 'GET', url: '/api/v1/channels?pageSize=1' });
+    const tr = res.json().items[0].trustReport;
+    expect(tr).not.toBeNull();
+    expect(tr.checks.length).toBe(8);
+    expect(tr.checks[0]).toHaveProperty('id');
+    expect(tr.checks[0]).toHaveProperty('passed');
+    expect(tr.checks[0]).not.toHaveProperty('detail');
+    expect(tr.checks[0]).not.toHaveProperty('evidence');
+    expect(tr).toHaveProperty('checkedAt');
+    expect(typeof tr.id).toBe('number');
+
+    // 与详情 latestReport.score 一致（同源）
+    const detail = await app.inject({ method: 'GET', url: `/api/v1/channels/${ctx.cheap.id}` });
+    expect(detail.json().latestReport?.score).toBe(tr.score);
+
+    // 清理
+    await db.execute(sql`DELETE FROM authenticity_reports WHERE channel_id = ${ctx.cheap.id}`);
+  });
+
+  it('无报告的渠道 trustReport 为 null', async () => {
+    // dear 渠道无报告（测试库中未插入）
+    await db.execute(sql`DELETE FROM authenticity_reports WHERE channel_id = ${ctx.dear.id}`);
+    const res = await app.inject({ method: 'GET', url: `/api/v1/channels?ids=${ctx.dear.id}` });
+    expect(res.json().items[0].trustReport).toBeNull();
+  });
+
+  it('/rankings/overview 和 /sites/:slug 的 channels 也带 trustReport', async () => {
+    await db.execute(sql`INSERT INTO authenticity_reports
+      (channel_id, model, protocol, score, verdict, checks, trigger, created_at)
+      VALUES (${ctx.cheap.id}, 'claude-opus-5-5', 'anthropic', 90, 'genuine', '[]', 'schedule', now())`);
+    const rankings = await app.inject({ method: 'GET', url: '/api/v1/rankings/overview' });
+    const firstChannel = rankings.json().models[0]?.top[0];
+    if (firstChannel) expect(firstChannel).toHaveProperty('trustReport');
+    const site = await app.inject({ method: 'GET', url: `/api/v1/sites/${ctx.site.slug}` });
+    expect(site.json().channels[0]).toHaveProperty('trustReport');
+    await db.execute(sql`DELETE FROM authenticity_reports WHERE channel_id = ${ctx.cheap.id}`);
+  });
+});
+
 describe('评价', () => {
   it('发表→更新→/me/reviews→删除', async () => {
     const cookie = await login('test-other@t.dev');
