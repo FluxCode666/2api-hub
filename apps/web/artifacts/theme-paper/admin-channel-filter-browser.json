@@ -1,0 +1,6 @@
+{
+  "url": "http://127.0.0.1:3210/admin/channels?sort=failures&pageSize=20&status=invalid&vendor=anthropic",
+  "vendor": "Anthropic",
+  "status": "已失效",
+  "page": 1
+}

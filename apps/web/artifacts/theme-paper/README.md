@@ -20,3 +20,9 @@
 移动 390px：light-mobile-home.png、light-mobile-rankings.png、light-mobile-rankings-page2.png、light-mobile-pagination.png。OG：og-home.png、og-model.png、og-site.png（均 1200×630）。全部目视检查；失败采用酒红文字、图标/虚线徽章与斜纹状态格，朱红仅用于品牌与交互。
 
 主题首帧证据 theme-first-frame.json；分页交互 pagination-interactions.json；源码扫描 source-scan.json；生产路由 real-route-checks.json；SEO seo-checks.json；接口 api-integration-results.json。截图尺寸清单 screenshots.json。Ego TaskSpace 37 已关闭，未执行浏览器升级。
+
+## 管理渠道与面包屑收尾
+
+管理渠道已使用 `/admin/channels` 服务端分页，原站点详情汇总限制已移除。`admin-channels-completion.json` 包含本轮验证结果；真实 API 15 项、Mock 12 项与最终四种排序、生产路由 42 项均通过。后台面包屑检查为站长 7 个路径、管理 15 个路径及一次客户端侧栏导航。
+
+指定截图：light-admin-channels.png、light-merchant-breadcrumb.png。补充：light-admin-channels-page2.png、light-merchant-breadcrumb-mobile.png。均在最终生产构建下截图并目视检查；Ego TaskSpace 41 已关闭。

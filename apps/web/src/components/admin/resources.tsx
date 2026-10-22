@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { PencilSimpleIcon, SpinnerGapIcon } from '@phosphor-icons/react';
-import type { AdminOverview, AdminSite, AdminUser, FeedbackItem, AdminReview, AuditLog, MerchantChannel, ChannelInput, ProbeRun, ProbeTask, Role, UserStatus, ProbeKind } from '@hub/shared';
+import type { AdminOverview, AdminSite, AdminChannel, AdminUser, FeedbackItem, AdminReview, AuditLog, MerchantChannel, ChannelInput, ProbeRun, ProbeTask, Role, UserStatus, ProbeKind } from '@hub/shared';
 import { PROTOCOL_LABELS } from '@hub/shared';
 import { apiWithHeaders, apiNoticeMessage } from '@/lib/api/client';
 import { useRouter } from 'next/navigation';
@@ -55,12 +55,13 @@ function ChannelEditor({ item }: { item: MerchantChannel }) {
     </div><div className="flex justify-end gap-2"><Button variant="outline" type="button" onClick={() => setOpen(false)}>取消</Button><Button disabled={form.formState.isSubmitting}>{form.formState.isSubmitting && <SpinnerGapIcon className="animate-spin" />}保存渠道</Button></div></form></Form></DialogContent></Dialog>;
 }
 
-export function ChannelsTable({ items }: { items: MerchantChannel[] }) {
+export function ChannelsTable({ items }: { items: AdminChannel[] }) {
   return <AdminTable items={items} searchText={item => `${item.id} ${item.name} ${item.primaryModel} ${item.baseUrl}`} statusOf={item => item.status} statuses={[{ value: 'active', label: '活跃' }, { value: 'paused', label: '暂停' }, { value: 'invalid', label: '失效' }]} columns={[
-    { label: '渠道', render: item => <><RecordLink href={`/channels/${item.id}`}>{item.name}</RecordLink><div className="font-mono text-xs tabular-nums text-muted-foreground">#{item.id} · 站点 #{item.siteId}</div></> },
+    { label: '站点 / 渠道', render: item => <><RecordLink href={`/admin/sites/${item.site.id}`}>{item.site.name}</RecordLink><div><RecordLink href={`/channels/${item.id}`}>{item.name}</RecordLink></div><div className="font-mono text-xs tabular-nums text-muted-foreground">#{item.id} · <Status value={item.site.status} /></div></> },
     { label: '模型 / 协议', render: item => <><div>{item.primaryModel}</div><div className="text-xs text-muted-foreground">{PROTOCOL_LABELS[item.protocol]}</div></> },
     { label: '状态', render: item => <Status value={item.status} /> },
     { label: '可用率 / 可信分', render: item => <span className="font-mono tabular-nums">{item.stats?.uptime24h == null ? '—' : `${(item.stats.uptime24h * 100).toFixed(1)}%`} / {item.stats?.trustScore ?? '—'}</span> },
+    { label: '连续失败', render: item => <span className={`font-mono tabular-nums ${(item.stats?.consecutiveFailures ?? 0) > 0 ? 'text-danger' : 'text-muted-foreground'}`}>{item.stats?.consecutiveFailures ?? 0} 次</span> },
     { label: '探测配置', render: item => <span className="font-mono tabular-nums">{item.probeEnabled ? `${item.probeIntervalSec}s` : '已暂停'}</span> },
     { label: '操作', render: item => <div style={actionRowStyle}><ChannelEditor key={item.updatedAt} item={item} />{(['availability', 'authenticity', 'discovery'] as ProbeKind[]).map(kind => <MutationButton key={kind} path={`/admin/channels/${item.id}/probe`} method="POST" body={{ kind }}>{kind === 'availability' ? '探测' : kind === 'authenticity' ? '真伪检测' : '获取模型'}</MutationButton>)}<RecordLink href={`/admin/probe-runs?channelId=${item.id}`}>日志</RecordLink></div> },
   ]} />;

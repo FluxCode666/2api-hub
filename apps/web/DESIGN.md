@@ -59,7 +59,7 @@ shadcn 的 accent 是交互悬停底色，和品牌 primary 含义不同；muted
 - 表单使用 react-hook-form + zod + Form。Key 最少 8 位，编辑空值表示保留。配置保存额度提示用 Sonner；不要将保存成功误报失败。
 - Dialog / AlertDialog 处理编辑、审核、确认删除；Sheet 处理移动导航和 Sidebar 移动模式；DropdownMenu 处理用户菜单；Tooltip 解释每格探测结果。
 - Skeleton / Separator / Avatar / ScrollArea / Accordion 为统一加载、分隔、头像、滚动与 FAQ 组件。
-- Sidebar 支持折叠、移动 Sheet，后台包含 Breadcrumb。延迟趋势、60 格探测条是领域专用 SVG/轻量组件，继承 chart/status token。
+- Sidebar 支持折叠、移动 Sheet，顶部使用品牌及角色标识；后台 Breadcrumb 的最后一项为当前位置，详情名称由页面提供，站点/渠道/编辑层级可返回对应父级。延迟趋势、60 格探测条是领域专用 SVG/轻量组件，继承 chart/status token。
 
 ## 分页约定
 
@@ -70,3 +70,5 @@ shadcn 的 accent 是交互悬停底色，和品牌 primary 含义不同；muted
 ## 版式
 
 内容最大宽 1320px，桌面边距 48px、移动 20px。品牌区块纵向 120–160px，数据页紧凑。榜单标题与副标题同排，筛选紧凑、更多条件折叠；数字 tabular-nums，行高 68px，表头 sticky 于导航下方。手机改卡片，表格不得撑宽文档。
+
+管理渠道直接使用 `/admin/channels` 服务端分页；支持状态、厂商、协议、站点、关键词与问题渠道快捷筛选。排查排序明确标注「可用率从低到高 / 可信分从低到高 / 连续失败最多」。

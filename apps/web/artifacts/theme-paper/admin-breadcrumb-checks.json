@@ -1,0 +1,111 @@
+[
+  {
+    "url": "http://127.0.0.1:3210/admin",
+    "crumbs": [
+      "平台管理",
+      "管理总览"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/reviews",
+    "crumbs": [
+      "平台管理",
+      "入驻审核"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/sites",
+    "crumbs": [
+      "平台管理",
+      "站点管理"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/channels",
+    "crumbs": [
+      "平台管理",
+      "渠道管理"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/probe-runs",
+    "crumbs": [
+      "平台管理",
+      "探测日志"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/tasks",
+    "crumbs": [
+      "平台管理",
+      "任务队列"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/models",
+    "crumbs": [
+      "平台管理",
+      "模型目录"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/vendors",
+    "crumbs": [
+      "平台管理",
+      "厂商管理"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/users",
+    "crumbs": [
+      "平台管理",
+      "用户管理"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/feedback",
+    "crumbs": [
+      "平台管理",
+      "用户反馈"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/ratings",
+    "crumbs": [
+      "平台管理",
+      "站点评价"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/announcements",
+    "crumbs": [
+      "平台管理",
+      "公告管理"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/settings",
+    "crumbs": [
+      "平台管理",
+      "系统设置"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/audit-logs",
+    "crumbs": [
+      "平台管理",
+      "审计日志"
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/admin/sites/1",
+    "crumbs": [
+      "平台管理",
+      "站点管理",
+      "星河API"
+    ]
+  },
+  {
+    "clientNavigation": "平台管理入驻审核"
+  }
+]

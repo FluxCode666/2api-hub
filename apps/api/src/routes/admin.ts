@@ -9,7 +9,7 @@ import {
   feedback, models, notifications, probeRuns, probeTasks, reviews, sites, siteStats, users, vendors,
 } from '@hub/db';
 import type {
-  AdminModel, AdminOverview, AdminReview, AdminSite, AdminSiteDetail, AdminUser, AdminVendor,
+  AdminChannel, AdminModel, AdminOverview, AdminReview, AdminSite, AdminSiteDetail, AdminUser, AdminVendor,
   Announcement, AuditLog, FeedbackItem, ModelInput, Paginated, ProbeRun, ProbeTask,
   SessionUser, SettingsMap, SiteReviewAction, VendorInput,
 } from '@hub/shared';
@@ -54,6 +54,16 @@ function adminSiteView(s: typeof sites.$inferSelect, owner: { id: string; email:
     stats: stats ? siteStatsView(stats) : null,
     createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt.toISOString(),
     owner, sortWeight: s.sortWeight, clickCount: s.clickCount,
+  };
+}
+
+/** raw SQL 的 snake_case 报告行 → reportView 期望的 camelCase 输入 */
+function rawReportToView(r: Record<string, unknown>) {
+  return {
+    id: r['id'] as number, channelId: r['channel_id'] as number, model: r['model'] as string,
+    protocol: r['protocol'] as string, score: r['score'] as number | null, verdict: r['verdict'] as string,
+    checks: r['checks'], durationMs: r['duration_ms'] as number | null,
+    trigger: r['trigger'] as string, createdAt: new Date(r['created_at'] as string),
   };
 }
 
@@ -292,6 +302,98 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   // ---------- 渠道管理 ----------
+  // 服务端分页渠道列表（管理后台）
+  app.get('/api/v1/admin/channels', async (req): Promise<Paginated<AdminChannel>> => {
+    await app.requireRole(req, 'admin');
+    const q = pageQuery.extend({
+      q: z.string().optional(),
+      status: z.enum(['active', 'paused', 'invalid']).optional(),
+      siteId: z.coerce.number().int().optional(),
+      siteStatus: z.enum(['draft', 'pending', 'approved', 'rejected', 'suspended']).optional(),
+      vendor: z.string().optional(),
+      protocol: z.enum(['openai_chat', 'openai_responses', 'anthropic', 'gemini']).optional(),
+      sort: z.enum(['recent', 'uptime', 'trust', 'failures']).default('recent'),
+    }).parse(req.query);
+
+    const conds = [];
+    if (q.q) {
+      for (const kw of q.q.split(/\s+/).filter(Boolean)) {
+        const like = `%${kw}%`;
+        conds.push(sql`(sites.name ILIKE ${like} OR channels.name ILIKE ${like} OR channels.base_url ILIKE ${like})`);
+      }
+    }
+    if (q.status) conds.push(eq(channels.status, q.status));
+    if (q.siteId !== undefined) conds.push(eq(channels.siteId, q.siteId));
+    if (q.siteStatus) conds.push(eq(sites.status, q.siteStatus));
+    if (q.protocol) conds.push(eq(channels.protocol, q.protocol));
+    if (q.vendor) {
+      conds.push(sql`(
+        vendors.slug = ${q.vendor} OR EXISTS (
+          SELECT 1 FROM channel_models cm
+          JOIN models mm ON mm.id = cm.model_id
+          JOIN vendors vv ON vv.id = mm.vendor_id
+          WHERE cm.channel_id = channels.id AND vv.slug = ${q.vendor}
+        )
+      )`);
+    }
+    const where = conds.length ? and(...conds) : undefined;
+
+    const orderCol =
+      q.sort === 'uptime' ? sql`channel_stats.uptime_24h ASC NULLS LAST, channels.id ASC`
+      : q.sort === 'trust' ? sql`channel_stats.trust_score ASC NULLS LAST, channels.id ASC`
+      : q.sort === 'failures' ? sql`channel_stats.consecutive_failures DESC NULLS LAST, channels.id ASC`
+      : sql`channels.updated_at DESC, channels.id ASC`; // recent
+
+    const total = (await db.select({ c: count() }).from(channels)
+      .innerJoin(sites, eq(channels.siteId, sites.id))
+      .leftJoin(vendors, eq(channels.vendorId, vendors.id))
+      .leftJoin(channelStats, eq(channels.id, channelStats.channelId))
+      .where(where))[0]?.c ?? 0;
+
+    const rows = await db.select({ c: channels, s: sites, v: vendors })
+      .from(channels)
+      .innerJoin(sites, eq(channels.siteId, sites.id))
+      .leftJoin(vendors, eq(channels.vendorId, vendors.id))
+      .leftJoin(channelStats, eq(channels.id, channelStats.channelId))
+      .where(where)
+      .orderBy(orderCol)
+      .limit(q.pageSize).offset((q.page - 1) * q.pageSize);
+
+    const channelIds = rows.map((r) => r.c.id);
+    const modelsMap = await loadMerchantChannelModelsFor(db, channelIds);
+    const statsRows = channelIds.length
+      ? await db.select().from(channelStats).where(inArray(channelStats.channelId, channelIds)) : [];
+    const statsMap = new Map(statsRows.map((r) => [r.channelId, r]));
+
+    // 每渠道最新报告：DISTINCT ON 在数据库中取
+    const reportRows = channelIds.length
+      ? await db.execute<Record<string, unknown>>(sql`
+          SELECT DISTINCT ON (channel_id)
+            id, channel_id, model, protocol, score, verdict, checks, duration_ms, trigger, created_at
+          FROM authenticity_reports
+          WHERE channel_id IN (${sql.join(channelIds.map((x) => sql`${x}`), sql`, `)})
+          ORDER BY channel_id, created_at DESC, id DESC`)
+      : [];
+    const reportMap = new Map<number, Record<string, unknown>>(reportRows.map((r) => [r['channel_id'] as number, r]));
+
+    const items: AdminChannel[] = rows.map(({ c, s, v }) => ({
+      id: c.id, siteId: c.siteId, name: c.name, description: c.description,
+      vendor: v ? vendorRef(v) : null,
+      protocol: c.protocol, baseUrl: c.baseUrl, apiKeyMask: c.apiKeyMask,
+      groupRatio: c.groupRatio,
+      actualRatio: s.rechargeRatio > 0 ? Math.round((c.groupRatio / s.rechargeRatio) * 10000) / 10000 : c.groupRatio,
+      billingType: c.billingType, primaryModel: c.primaryModel, backupModel: c.backupModel,
+      rpmLimit: c.rpmLimit, status: c.status, probeEnabled: c.probeEnabled,
+      probeIntervalSec: c.probeIntervalSec, lastTestOk: c.lastTestOk, lastTestAt: iso(c.lastTestAt),
+      models: modelsMap.get(c.id) ?? [],
+      stats: statsMap.has(c.id) ? channelStatsView(statsMap.get(c.id)!) : null,
+      latestReport: reportMap.has(c.id) ? reportView(rawReportToView(reportMap.get(c.id)!)) : null,
+      createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString(),
+      site: { id: s.id, slug: s.slug, name: s.name, status: s.status },
+    }));
+    return { items, total, page: q.page, pageSize: q.pageSize };
+  });
+
   app.post('/api/v1/admin/channels/:id/probe', async (req, reply): Promise<ProbeTask> => {
     const admin = await app.requireRole(req, 'admin');
     const { id } = idParam.parse(req.params);

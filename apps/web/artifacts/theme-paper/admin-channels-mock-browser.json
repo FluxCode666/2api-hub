@@ -1,0 +1,14 @@
+{
+  "second": {
+    "url": "http://127.0.0.1:3210/admin/channels?page=2&pageSize=20",
+    "pager": "共 38 条上一页第 2 / 2 页12下一页"
+  },
+  "invalid": {
+    "url": "http://127.0.0.1:3210/admin/channels?pageSize=20&status=invalid&sort=failures",
+    "total": "共 1 条20 条 / 页上一页第 1 / 1 页1下一页",
+    "rows": [
+      "晴空中转OpenAI 标准分组#26 · 已上线gpt-6-astraOpenAI Responses已失效0.0% / 10060 次600s编辑探测真伪检测获取模型日志"
+    ]
+  },
+  "failures": "http://127.0.0.1:3210/admin/channels?pageSize=20&sort=failures"
+}

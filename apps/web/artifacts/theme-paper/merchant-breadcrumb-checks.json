@@ -1,0 +1,114 @@
+[
+  {
+    "url": "http://127.0.0.1:3210/merchant",
+    "crumbs": [
+      {
+        "text": "站长工作台",
+        "href": "/merchant"
+      },
+      {
+        "text": "工作台总览"
+      }
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/merchant/sites",
+    "crumbs": [
+      {
+        "text": "站长工作台",
+        "href": "/merchant"
+      },
+      {
+        "text": "我的站点"
+      }
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/merchant/onboarding",
+    "crumbs": [
+      {
+        "text": "站长工作台",
+        "href": "/merchant"
+      },
+      {
+        "text": "站点入驻"
+      }
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/merchant/sites/1",
+    "crumbs": [
+      {
+        "text": "站长工作台",
+        "href": "/merchant"
+      },
+      {
+        "text": "我的站点",
+        "href": "/merchant/sites"
+      },
+      {
+        "text": "星河API"
+      }
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/merchant/sites/1/edit",
+    "crumbs": [
+      {
+        "text": "站长工作台",
+        "href": "/merchant"
+      },
+      {
+        "text": "我的站点",
+        "href": "/merchant/sites"
+      },
+      {
+        "text": "星河API",
+        "href": "/merchant/sites/1"
+      },
+      {
+        "text": "编辑站点"
+      }
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/merchant/onboarding?siteId=1",
+    "crumbs": [
+      {
+        "text": "站长工作台",
+        "href": "/merchant"
+      },
+      {
+        "text": "我的站点",
+        "href": "/merchant/sites"
+      },
+      {
+        "text": "星河API",
+        "href": "/merchant/sites/1"
+      },
+      {
+        "text": "继续入驻"
+      }
+    ]
+  },
+  {
+    "url": "http://127.0.0.1:3210/merchant/channels/1",
+    "crumbs": [
+      {
+        "text": "站长工作台",
+        "href": "/merchant"
+      },
+      {
+        "text": "我的站点",
+        "href": "/merchant/sites"
+      },
+      {
+        "text": "星河API",
+        "href": "/merchant/sites/1"
+      },
+      {
+        "text": "Claude 官转"
+      }
+    ]
+  }
+]

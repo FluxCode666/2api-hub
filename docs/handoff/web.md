@@ -165,9 +165,18 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 - 默认 SSR 亮色；next-themes `defaultTheme=light`、`enableSystem=false`、`attribute=class`。head 内联脚本在内容绘制前恢复本域 `hub-theme`，同时更新 theme-color；浏览器首帧记录验证默认亮色和保存暗色均直接显示正确背景。
 - `DataPagination` 用真实 a 链接显示总数、20/50/100、页码与省略号；390px 为上一页 / 第 x/y 页 / 下一页。服务端分页覆盖榜单、模型/厂商详情榜单、站点目录、站点评价、公开探测记录、个人收藏/评价/通知、站长探测日志、管理员站点/审核/用户/日志/任务/反馈/评价/审计/模型。数组分页覆盖模型/厂商目录、站点渠道、渠道模型与历史报告、站长我的站点/渠道/告警与入驻列表、管理厂商/公告；固定 Top3 与对比免分页。
 - 渠道走势图继续请求 history；日志改为 `/channels/:id/runs`，使用 runsPage/runsPageSize 与只看失败筛选。站点评价使用 reviewsPage，站点渠道使用 channelsPage；切页不会覆盖另一个列表。筛选改变重置当前页，评价在后续页保存时回到评价第一页。
-- 管理渠道无独立列表 API，当前完整遍历站点详情汇总再分页，数据量较大时会有额外请求；搜索条件作用于所属站点。其余已有 Paginated 接口均使用真实服务端分页。
+- 管理渠道已改为 `GET /admin/channels` 真实服务端分页，删除完整遍历站点详情的实现；支持渠道/站点/域名搜索、状态、厂商、协议、站点状态/编号与排序，以及失效/连续失败问题渠道快捷视图。所有已有 Paginated 接口均使用真实服务端分页。
 - 已删除 globals.css 中旧通用组件类，源码硬编码颜色扫描为零（中央 token JSON 除外）。保留品牌布局与 GSAP；手机筛选区溢出、Tabs 滚动条和生产详情页静态声明冲突已修正。
 - 对比度脚本 `node apps/web/scripts/check-contrast.mjs --save`：74/74 通过，最低文字 4.62:1、控件边界 3.26:1。完整主题和组件约定见 DESIGN.md。
 - 最终 `typecheck`、真实 API `build` 均通过；生产模式路由 42/42、SEO 25/25；Mock 路由 42/42。源码硬编码颜色（中央色板除外）及旧通用类扫描均为零。结果、构建日志与截图统一位于 `apps/web/artifacts/theme-paper/`。
 - ego-browser TaskSpace 37 完成双主题桌面检查：首页 Hero/Top3、榜单第 2 页与失败状态、抖动渠道、genuine/fake 鉴定、入驻向导、站长渠道、管理审核及日志分页。另检查 390px 首页、榜单和分页，以及三张 1200×630 OG 图；均已目视检查。移动文档宽度为 390px，分页每页条数切换与筛选均回到第 1 页，公开探测日志支持 runsPage=2。亮暗首帧及 theme-color 正确，证据 `theme-first-frame.json`、`pagination-interactions.json`。
 - 本轮公开鉴定通过真实 API 获得 genuine=100、fake=31，八项检查完整显示；短 Key 被前端拦截，完成后 Key 清空。失效渠道 #31 保留状态横幅、只读历史与 noindex。朱红品牌操作与酒红失败徽章、斜纹状态格可清楚区分，延迟曲线使用中性色。
+
+
+## 管理渠道分页与后台面包屑收尾（2026-10-22）
+
+- 管理渠道列表直接导入 `AdminChannel`，调用 `/admin/channels?page=&pageSize=`；同一套 DataPagination 同步全部筛选到 URL，筛选及问题渠道快捷视图重置页码。表格显示所属站点与状态、渠道和连续失败数。可用率/可信分按从低到高排查，连续失败按从高到低，空统计排最后。
+- Mock 同步新增接口及 AdminChannel 的 site 字段、搜索、筛选、四种排序和分页；保留 API Key 掩码。真实接口初次返回 500，已反馈 Kimi 并由后端修复，读取及边界已复测通过，前端未修改后端代码。
+- 后台侧栏顶部改为「2API Hub · 站长 / 管理」。面包屑支持站点和渠道名称、编辑层级、继续入驻；站长渠道页显示「站长工作台 › 我的站点 › 星河API › Claude 官转」。名称复用详情页已取得的数据，不额外请求。渠道页侧栏选中「我的站点」，所有后台静态页面沿路由显示实际位置。
+
+- 本轮验收：`typecheck`、真实 API `build` 与生产模式 42 项路由全部通过；Mock 接口 12 项检查及四种最终排序通过，真实接口 15 项定向检查通过。浏览器逐页核对站长 7 个路径、管理 15 个路径，并验证从详情页经侧栏切换后面包屑更新。指定截图 `light-admin-channels.png`、`light-merchant-breadcrumb.png` 已目视检查，另有管理第二页和 390px 面包屑补充截图。证据在 `artifacts/theme-paper/admin-*-checks.json`、`merchant-breadcrumb-checks.json` 与对应日志；Ego TaskSpace 41 已关闭，3210 恢复真实 API 开发模式。

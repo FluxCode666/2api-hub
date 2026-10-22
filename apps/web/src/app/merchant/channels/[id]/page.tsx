@@ -6,6 +6,7 @@ import { paginationValues } from '@/lib/pagination';
 import { PageHead } from '@/components/page-kit';
 import { ChannelManager } from '@/components/merchant/channel-manager';
 import { getMerchantSite } from '@/components/merchant/server';
+import { DashboardTrail } from '@/components/dashboard-shell';
 export default async function ChannelPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<SearchValues> }) {
   await requireSession();
   const { id } = await params;
@@ -20,5 +21,5 @@ export default async function ChannelPage({ params, searchParams }: { params: Pr
   const runs = page === pagination.page ? requestedRuns : await serverApi<Paginated<ProbeRun>>(`/merchant/channels/${id}/runs?page=${page}&pageSize=${pagination.pageSize}`);
   const channel = site.channels.find((entry) => entry.id === channelId);
   if (!channel) notFound();
-  return <><PageHead title={channel.name} description="检查连接、维护模型映射与价格，查看完整检测记录。" /><ChannelManager initialSite={site} channelId={channelId} models={models} vendors={vendors} initialRuns={runs} values={values} /></>;
+  return <><DashboardTrail items={[{ label: '我的站点', href: '/merchant/sites' }, { label: site.name, href: `/merchant/sites/${site.id}` }, { label: channel.name }]} /><PageHead title={channel.name} description="检查连接、维护模型映射与价格，查看完整检测记录。" /><ChannelManager initialSite={site} channelId={channelId} models={models} vendors={vendors} initialRuns={runs} values={values} /></>;
 }

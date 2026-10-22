@@ -1,0 +1,22 @@
+{
+  "typecheck": "PASS",
+  "build": "PASS",
+  "productionRoutes": 42,
+  "realApiChecks": 15,
+  "mockApiChecks": 12,
+  "finalMockSorts": 4,
+  "merchantBreadcrumbRoutes": 7,
+  "adminBreadcrumbRoutes": 15,
+  "adminClientNavigation": "PASS",
+  "mobileWidth": 390,
+  "mobileScrollWidth": 390,
+  "browserTaskSpace": 41,
+  "browserFinished": true,
+  "screenshots": [
+    "light-admin-channels.png",
+    "light-admin-channels-page2.png",
+    "light-merchant-breadcrumb.png",
+    "light-merchant-breadcrumb-mobile.png"
+  ],
+  "openIssues": []
+}

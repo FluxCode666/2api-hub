@@ -1,6 +1,6 @@
 import {themes} from '@/lib/theme';
 import { actualRatio, computeRecommendScore, DEFAULT_SETTINGS } from '@hub/shared';
-import type { AdminModel, AdminOverview, AdminReview, AdminSite, AdminSiteDetail, AdminUser, AdminVendor, Announcement, AuditLog, ChannelInput, FeedbackItem, MerchantChannel, ModelInput, Paginated, ProbeKind, ProbeRun, ProbeTask, ReviewStatus, Role, SessionUser, SettingsMap, SiteInput, SiteReviewAction, VendorInput, VendorRef } from '@hub/shared';
+import type { AdminChannel, AdminModel, AdminOverview, AdminReview, AdminSite, AdminSiteDetail, AdminUser, AdminVendor, Announcement, AuditLog, ChannelInput, FeedbackItem, MerchantChannel, ModelInput, Paginated, ProbeKind, ProbeRun, ProbeTask, ReviewStatus, Role, SessionUser, SettingsMap, SiteInput, SiteReviewAction, VendorInput, VendorRef } from '@hub/shared';
 import { mockAnnouncements, mockModels, mockReport, mockUsers, mockVendors } from './fixtures';
 import { getMockMerchantOwner, getMockMerchantRuns, getMockMerchantSites, getMockMerchantTasks, updateMockMerchantSite } from './merchant';
 import { mockCommunityStore } from './store';
@@ -83,6 +83,23 @@ export async function mockAdmin(path: string, method: string, body: unknown, use
   }
   if (route === '/admin/sites' && method === 'GET') {
     const sites: AdminSite[] = getMockMerchantSites().map(site => { const { channels: _channels, reports: _reports, ...summary } = siteDetail(site.id); return summary; }).filter(site => (!query.get('status') || site.status === query.get('status')) && match(`${site.name} ${site.owner.email} ${site.slug}`, query)).sort((a, b) => (b.submittedAt ?? b.createdAt).localeCompare(a.submittedAt ?? a.createdAt)); return page(sites, query);
+  }
+  if (route === '/admin/channels' && method === 'GET') {
+    const valid: Record<string, string[]> = { status: ['active', 'paused', 'invalid'], siteStatus: ['draft', 'pending', 'approved', 'rejected', 'suspended'], protocol: ['openai_chat', 'openai_responses', 'anthropic', 'gemini'], sort: ['recent', 'uptime', 'trust', 'failures'] };
+    for (const [key, allowed] of Object.entries(valid)) if (query.has(key) && !allowed.includes(query.get(key)!)) throw new MockError(400, 'validation', '无效的渠道筛选条件');
+    if (query.has('siteId') && !/^[1-9]\d*$/.test(query.get('siteId')!)) throw new MockError(400, 'validation', '站点编号必须是正整数');
+    const channels: AdminChannel[] = getMockMerchantSites().flatMap(site => site.channels.map(channel => ({ ...channel, site: { id: site.id, slug: site.slug, name: site.name, status: site.status } })));
+    const keywords = (query.get('q') ?? '').toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
+    const filtered = channels.filter(channel => (!query.get('status') || channel.status === query.get('status')) && (!query.get('siteId') || channel.site.id === Number(query.get('siteId'))) && (!query.get('siteStatus') || channel.site.status === query.get('siteStatus')) && (!query.get('vendor') || channel.vendor?.slug === query.get('vendor') || channel.models.some(model => db.models.some(catalog => catalog.slug === model.modelSlug && catalog.vendor.slug === query.get('vendor')))) && (!query.get('protocol') || channel.protocol === query.get('protocol')) && keywords.every(keyword => `${channel.site.name} ${channel.name} ${channel.baseUrl}`.toLocaleLowerCase().includes(keyword)));
+    const sort = query.get('sort') ?? 'recent';
+    filtered.sort((a, b) => {
+      if (sort === 'recent') return b.updatedAt.localeCompare(a.updatedAt) || a.id - b.id;
+      const metric = (channel: AdminChannel) => sort === 'uptime' ? channel.stats?.uptime24h : sort === 'trust' ? channel.stats?.trustScore : channel.stats?.consecutiveFailures;
+      const av = metric(a), bv = metric(b);
+      if (av == null || bv == null) return av == null && bv == null ? a.id - b.id : av == null ? 1 : -1;
+      return (sort === 'failures' ? bv - av : av - bv) || a.id - b.id;
+    });
+    return page(filtered, query);
   }
   const siteMatch = route.match(/^\/admin\/sites\/(\d+)(?:\/(review))?$/);
   if (siteMatch) {

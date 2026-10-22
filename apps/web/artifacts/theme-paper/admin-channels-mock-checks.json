@@ -1,0 +1,57 @@
+[
+  {
+    "check": "跨页、总数、AdminChannel站点字段与密钥掩码",
+    "pass": true,
+    "total": 38
+  },
+  {
+    "check": "状态",
+    "pass": true,
+    "total": 37
+  },
+  {
+    "check": "站点",
+    "pass": true,
+    "total": 3
+  },
+  {
+    "check": "站点状态",
+    "pass": true,
+    "total": 36
+  },
+  {
+    "check": "厂商",
+    "pass": true,
+    "total": 6
+  },
+  {
+    "check": "协议",
+    "pass": true,
+    "total": 24
+  },
+  {
+    "check": "关键词",
+    "pass": true,
+    "total": 2
+  },
+  {
+    "check": "排序 recent",
+    "pass": true
+  },
+  {
+    "check": "排序 uptime",
+    "pass": true
+  },
+  {
+    "check": "排序 trust",
+    "pass": true
+  },
+  {
+    "check": "排序 failures",
+    "pass": true
+  },
+  {
+    "check": "越界空页、pageSize截断、筛选后总数",
+    "pass": true
+  }
+]

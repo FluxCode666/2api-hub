@@ -1,0 +1,71 @@
+[
+  {
+    "check": "跨页、总数、AdminChannel与密钥掩码",
+    "pass": true,
+    "total": 34
+  },
+  {
+    "check": "状态",
+    "pass": true,
+    "total": 1
+  },
+  {
+    "check": "站点",
+    "pass": true,
+    "total": 2
+  },
+  {
+    "check": "站点状态",
+    "pass": true,
+    "total": 32
+  },
+  {
+    "check": "厂商",
+    "pass": true,
+    "total": 12
+  },
+  {
+    "check": "协议",
+    "pass": true,
+    "total": 12
+  },
+  {
+    "check": "渠道名搜索",
+    "pass": true,
+    "total": 1
+  },
+  {
+    "check": "站点名搜索",
+    "pass": true,
+    "total": 2
+  },
+  {
+    "check": "上游域名搜索",
+    "pass": true,
+    "total": 34
+  },
+  {
+    "check": "排序 recent",
+    "pass": true
+  },
+  {
+    "check": "排序 uptime",
+    "pass": true
+  },
+  {
+    "check": "排序 trust",
+    "pass": true
+  },
+  {
+    "check": "排序 failures",
+    "pass": true
+  },
+  {
+    "check": "越界空页、截断与筛选后总数",
+    "pass": true
+  },
+  {
+    "check": "未登录拒绝",
+    "pass": true
+  }
+]

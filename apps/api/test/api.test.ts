@@ -557,6 +557,43 @@ describe('公开 runs 接口（GET /channels/:id/runs）', () => {
   });
 });
 
+describe('admin channels 服务端分页', () => {
+  it('admin 可访问，返回 AdminChannel 含 site 字段', async () => {
+    const adminCookie = await login('test-admin@t.dev');
+    const res = await app.inject({ method: 'GET', url: '/api/v1/admin/channels?pageSize=10', headers: { cookie: adminCookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total).toBeGreaterThanOrEqual(2);
+    expect(body.items[0]).toHaveProperty('site');
+    expect(body.items[0].site).toHaveProperty('slug');
+    expect(body.items[0]).toHaveProperty('apiKeyMask');
+    expect(body.items[0]).not.toHaveProperty('apiKeyEnc');
+  });
+
+  it('非 admin 返回 403', async () => {
+    const cookie = await login('test-merchant@t.dev');
+    const res = await app.inject({ method: 'GET', url: '/api/v1/admin/channels', headers: { cookie } });
+    expect(res.statusCode).toBe(403);
+  });
+
+  it('筛选：status + vendor + q + 排序', async () => {
+    const adminCookie = await login('test-admin@t.dev');
+    // status 筛选
+    const active = await app.inject({ method: 'GET', url: '/api/v1/admin/channels?status=active', headers: { cookie: adminCookie } });
+    expect(active.json().items.every((c: { status: string }) => c.status === 'active')).toBe(true);
+    // q 筛选（渠道名）
+    const q = await app.inject({ method: 'GET', url: '/api/v1/admin/channels?q=低价', headers: { cookie: adminCookie } });
+    expect(q.json().items.length).toBeGreaterThanOrEqual(1);
+    expect(q.json().items[0].name).toContain('低价');
+    // vendor 筛选
+    const v = await app.inject({ method: 'GET', url: '/api/v1/admin/channels?vendor=anthropic', headers: { cookie: adminCookie } });
+    expect(v.json().total).toBeGreaterThanOrEqual(2);
+    // sort=failures（连续失败降序）
+    const f = await app.inject({ method: 'GET', url: '/api/v1/admin/channels?sort=failures', headers: { cookie: adminCookie } });
+    expect(f.statusCode).toBe(200);
+  });
+});
+
 describe('评价', () => {
   it('发表→更新→/me/reviews→删除', async () => {
     const cookie = await login('test-other@t.dev');

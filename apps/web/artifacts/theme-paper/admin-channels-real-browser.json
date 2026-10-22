@@ -1,0 +1,14 @@
+{
+  "second": {
+    "url": "http://127.0.0.1:3210/admin/channels?sort=failures&page=2&pageSize=20",
+    "pager": "共 34 条上一页第 2 / 2 页12下一页",
+    "firstRow": "极光APIClaude 精品#19 · 已上线claude-fable-5-1Anthropic Messages正常98.6% / 940 次600s编辑探测真伪检测获取模型日志"
+  },
+  "invalid": {
+    "url": "http://127.0.0.1:3210/admin/channels?sort=failures&pageSize=20&status=invalid",
+    "pager": "共 1 条20 条 / 页上一页第 1 / 1 页1下一页",
+    "rows": [
+      "断崖数据Claude 骨折价#31 · 已上线claude-fable-5-1Anthropic Messages已失效0.0% / —1009 次600s编辑探测真伪检测获取模型日志"
+    ]
+  }
+}
