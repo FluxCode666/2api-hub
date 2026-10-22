@@ -95,6 +95,17 @@ typecheck 通过；19 个测试全通过（新增 #7 去重、#5 入队复用、
 | 9 | 额度规则收进 enqueueProbeTask（trigger=merchant+kind=authenticity 自动计入）；超限时 PATCH 照常保存但不入队，响应头 `X-Hub-Notice` 提示 |
 | Dockerfile/compose | api 加 `ENV API_HOST=0.0.0.0`；worker 加 `WORKER_HOST=0.0.0.0`；mock 加 `MOCK_HOST=0.0.0.0` |
 
+## 按模型的可信分（2026-10-22，契约「按模型的可信分」）
+
+- `ChannelListItem` 新增 `trustBasis: 'primary' | 'model'`、`fallbackTrustReport: TrustReportBrief | null`；`ChannelModelView` 新增 `trustReport`。
+- 不带 `model` 时：行为不变，`trustBasis='primary'`，stats/trustReport 基于主测模型。
+- 带 `model` 时：`trustBasis='model'`，stats.trustScore/trustVerdict 取该渠道所选模型 channel_models 行的 trust 字段；stats.recommendScore 取该行 `recommend_score`（null 时回退渠道级 `channel_stats.recommend_score`）；trustReport 取该渠道 `model = 该行 upstream_name` 的最近一次报告摘要；没有时 fallbackTrustReport 取主测模型摘要。
+- `sort=trust`/`sort=recommend`/`minTrust` 按模型口径排序/筛选（NULLS LAST 不变）。
+- `/channels/:id` 的 models[] 每个模型带自己的 trustReport（批量 DISTINCT ON）。
+- `/admin/settings` 支持 `authenticity.modelScope`（enum：primary/featured/all）、`authenticity.secondaryIntervalHours`。
+- 种子新增 3 个混合场景渠道：「Claude 混线（Opus 换皮）」主测 genuine + opus=fake；「GPT 混线（Astra 降智）」fast + astra=downgraded；「Gemini 混线（Flash 换皮）」genuine + flash=fake。每个声明模型有合成报告，channel_models trust 已回写。
+- 验证：`/channels?model=claude-opus-5-5` 中 id=35 混线 trustScore=27（fake），不带 model 时同渠道 trustScore=91（主测 genuine）。
+
 ## 已知问题 / 依赖
 
 - mock-upstream（8712）未启动时，连接测试返回 `network` 错误（符合预期）；worker 启动后 channel_stats/site_stats 会有数据。

@@ -1,0 +1,38 @@
+{
+  "checkedAt": "2026-10-22T10:55:57.612Z",
+  "typecheck": "PASS",
+  "build": "PASS",
+  "routes": {
+    "passed": 42,
+    "total": 42
+  },
+  "seo": {
+    "passed": 25,
+    "failed": 0
+  },
+  "api": {
+    "passed": 30,
+    "failed": 0,
+    "skipped": 0
+  },
+  "contrast": {
+    "passed": 74,
+    "total": 74
+  },
+  "settings": {
+    "checkedAt": "2026-10-22T10:52:38.783Z",
+    "before": "featured",
+    "after": "all",
+    "secondaryIntervalHours": 48,
+    "otherSettingsUnchanged": true,
+    "ui": "全部声明模型"
+  },
+  "browserTask": {
+    "id": 51,
+    "finished": true
+  },
+  "server": {
+    "port": 3210,
+    "mode": "real-api-dev"
+  }
+}

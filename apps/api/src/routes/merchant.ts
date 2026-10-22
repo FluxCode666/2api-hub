@@ -267,12 +267,14 @@ export async function merchantRoutes(app: FastifyInstance) {
     }
     const reportRows = channelIds.length
       ? await db.execute<RawReport>(sql`
-          SELECT DISTINCT ON (channel_id)
-            id, channel_id, channel_model_id, task_id, model, protocol, score, verdict,
-            checks, duration_ms, trigger, created_at
-          FROM authenticity_reports
-          WHERE channel_id IN (${sql.join(channelIds.map((x) => sql`${x}`), sql`, `)})
-          ORDER BY channel_id, created_at DESC, id DESC`)
+          SELECT DISTINCT ON (ar.channel_id)
+            ar.id, ar.channel_id, ar.channel_model_id, ar.task_id, ar.model, ar.protocol, ar.score, ar.verdict,
+            ar.checks, ar.duration_ms, ar.trigger, ar.created_at
+          FROM authenticity_reports ar
+          JOIN channels c2 ON c2.id = ar.channel_id
+          WHERE ar.channel_id IN (${sql.join(channelIds.map((x) => sql`${x}`), sql`, `)})
+            AND ar.model = c2.primary_model
+          ORDER BY ar.channel_id, ar.created_at DESC, ar.id DESC`)
       : [];
     const reportMap = new Map<number, RawReport>(reportRows.map((r) => [r.channel_id, r]));
 

@@ -22,6 +22,13 @@
       "when": 1792610210651,
       "tag": "0002_probe_tasks_lease",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792657218628,
+      "tag": "0003_channel_models_recommend",
+      "breakpoints": true
     }
   ]
 }

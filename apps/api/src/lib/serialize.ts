@@ -20,8 +20,12 @@ export function vendorRef(v: { slug: string; name: string; nameZh: string | null
   return { slug: v.slug, name: v.name, nameZh: v.nameZh, color: v.color, iconUrl: v.iconUrl };
 }
 
-/** channel_stats 缺行时按“无数据”处理（worker 未启动/未聚合） */
-export function channelStatsView(s: ChannelStatsRow | undefined | null): ChannelStatsView {
+/** channel_stats 缺行时按“无数据”处理（worker 未启动/未聚合）
+ *  overrideTrust：按模型口径时用 channel_models 行的 trust/recommend 覆盖渠道级值 */
+export function channelStatsView(
+  s: ChannelStatsRow | undefined | null,
+  overrideTrust?: { trustScore: number | null; trustVerdict: string | null; recommendScore: number | null },
+): ChannelStatsView {
   return {
     uptime1h: s?.uptime1h ?? null,
     uptime24h: s?.uptime24h ?? null,
@@ -34,9 +38,15 @@ export function channelStatsView(s: ChannelStatsRow | undefined | null): Channel
     lastSuccessAt: iso(s?.lastSuccessAt),
     lastFailureAt: iso(s?.lastFailureAt),
     lastProbeAt: iso(s?.lastProbeAt),
-    trustScore: s?.trustScore ?? null,
-    trustVerdict: (s?.trustVerdict ?? 'unknown') as TrustVerdict,
-    recommendScore: s?.recommendScore ?? null,
+    // 按模型口径：trustScore/trustVerdict 严格用模型级值（null=未检测，不回退主测）；
+    // recommendScore 为 null 时回退渠道级（编排者明确的回退规则）
+    trustScore: overrideTrust ? overrideTrust.trustScore : (s?.trustScore ?? null),
+    trustVerdict: (overrideTrust
+      ? ((overrideTrust.trustVerdict ?? 'unknown') as TrustVerdict)
+      : ((s?.trustVerdict ?? 'unknown') as TrustVerdict)),
+    recommendScore: overrideTrust
+      ? (overrideTrust.recommendScore ?? s?.recommendScore ?? null)
+      : (s?.recommendScore ?? null),
     sparkline: (s?.sparkline ?? []) as SparkPoint[],
   };
 }

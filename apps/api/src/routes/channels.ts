@@ -83,22 +83,53 @@ export async function channelRoutes(app: FastifyInstance) {
       .from(channelModels)
       .leftJoin(models, eq(channelModels.modelId, models.id))
       .where(eq(channelModels.channelId, id));
+
+    // 批量查询每个模型的最近一次真伪报告摘要（按 upstream_name 匹配）
+    const upstreamNames = modelRows.map((r) => r.cm.upstreamName);
+    const modelReports = new Map<string, { id: number; model: string; score: number | null; verdict: string; checks: unknown; createdAt: string }>();
+    if (upstreamNames.length > 0) {
+      const reportRows = await db.execute<Record<string, unknown>>(sql`
+        SELECT DISTINCT ON (model)
+          id, model, score, verdict, checks, created_at
+        FROM authenticity_reports
+        WHERE channel_id = ${id} AND model IN (${sql.join(upstreamNames.map((n) => sql`${n}`), sql`, `)})
+        ORDER BY model, created_at DESC, id DESC`);
+      for (const r of reportRows) {
+        modelReports.set(r['model'] as string, {
+          id: Number(r['id']), model: r['model'] as string,
+          score: r['score'] as number | null, verdict: r['verdict'] as string,
+          checks: r['checks'], createdAt: new Date(r['created_at'] as string).toISOString(),
+        });
+      }
+    }
+
     const ratio = actualRatio(c.groupRatio, s.rechargeRatio);
-    const modelViews: ChannelModelView[] = modelRows.map(({ cm, m }) => ({
-      id: cm.id,
-      upstreamName: cm.upstreamName,
-      modelSlug: m?.slug ?? null,
-      displayName: m?.displayName ?? null,
-      vendorSlug: null, // 由下方填充
-      lastStatus: cm.lastStatus,
-      lastLatencyMs: cm.lastLatencyMs,
-      lastTestedAt: iso(cm.lastTestedAt),
-      lastError: cm.lastError,
-      trustScore: cm.trustScore,
-      trustVerdict: cm.trustVerdict,
-      inputPriceCny: cm.priceOverrideInput ?? priceCny(m?.officialInputPrice ?? null, ratio),
-      outputPriceCny: cm.priceOverrideOutput ?? priceCny(m?.officialOutputPrice ?? null, ratio),
-    }));
+    const modelViews: ChannelModelView[] = modelRows.map(({ cm, m }) => {
+      const report = modelReports.get(cm.upstreamName);
+      return {
+        id: cm.id,
+        upstreamName: cm.upstreamName,
+        modelSlug: m?.slug ?? null,
+        displayName: m?.displayName ?? null,
+        vendorSlug: null, // 由下方填充
+        trustReport: report ? {
+          id: report.id, model: report.model, score: report.score,
+          verdict: report.verdict as 'genuine' | 'suspect' | 'fake' | 'unknown',
+          checkedAt: report.createdAt,
+          checks: (report.checks as { id: string; passed: boolean | null; score?: number }[]).map((ck) => ({
+            id: ck.id as 'connectivity', passed: ck.passed, ...(ck.score !== undefined ? { score: ck.score } : {}),
+          })),
+        } : null,
+        lastStatus: cm.lastStatus,
+        lastLatencyMs: cm.lastLatencyMs,
+        lastTestedAt: iso(cm.lastTestedAt),
+        lastError: cm.lastError,
+        trustScore: cm.trustScore,
+        trustVerdict: cm.trustVerdict,
+        inputPriceCny: cm.priceOverrideInput ?? priceCny(m?.officialInputPrice ?? null, ratio),
+        outputPriceCny: cm.priceOverrideOutput ?? priceCny(m?.officialOutputPrice ?? null, ratio),
+      };
+    });
     // 填充 vendorSlug
     if (modelRows.some((r) => r.m)) {
       const vendorIds = [...new Set(modelRows.filter((r) => r.m).map((r) => r.m!.vendorId))];
@@ -110,8 +141,9 @@ export async function channelRoutes(app: FastifyInstance) {
       }
     }
 
+    // latestReport 固定为主测模型的最近一次报告（与 stats.trustScore 同源，避免混合场景返回非主测报告）
     const latestReportRow = (await db.select().from(authenticityReports)
-      .where(eq(authenticityReports.channelId, id))
+      .where(and(eq(authenticityReports.channelId, id), eq(authenticityReports.model, c.primaryModel)))
       .orderBy(desc(authenticityReports.createdAt)).limit(1))[0];
 
     const { models: _omit, ...rest } = listItem;

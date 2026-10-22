@@ -93,7 +93,8 @@ pnpm monorepo，Node 22，TypeScript strict，全部 ESM。包作用域 `@hub/*`
 
 ### 4.3 模型检测（真伪/一致性）
 
-- 触发：入驻提交审核、管理员手动、站长手动（每渠道每天 ≤ 3 次）、定时（每渠道每 24h 对主测模型一次）。
+- 触发：入驻提交审核、管理员手动、站长手动（每渠道每天 ≤ 3 次）、定时（主测模型每 `authenticity.intervalHours`（默认 24h）一次；其余已映射到目录的声明模型按 `authenticity.modelScope`（默认 all）每 `authenticity.secondaryIntervalHours`（默认 48h）一次，从未检测过的模型立即到期）。
+- **按模型的可信分**：`channel_models.trust_score / trust_verdict` 记录每个模型最近一次检测；worker 聚合时为每个渠道模型以其自身可信分计算 `channel_models.recommend_score`。`GET /channels?model=` 时，`stats.trustScore / trustVerdict / recommendScore`、`trustReport`、`sort=trust|recommend`、`minTrust` 均基于所选模型（`trustBasis='model'`）；所选模型未检测时 `trustReport=null`、`stats.trustScore=null`，并在 `fallbackTrustReport` 中给出主测模型的检测供参考。
 - 通过 `probe_tasks` 表排队，worker 拉取执行，结果写 `authenticity_reports` 并回写 `channel_models.trust_score / trust_verdict` 与 `channel_stats.trust_score`。
 
 ### 4.4 公开 API 鉴定工具（`/verify`）

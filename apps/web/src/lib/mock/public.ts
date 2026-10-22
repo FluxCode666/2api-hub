@@ -1,7 +1,7 @@
 import { toTrustReportBrief } from '@/lib/trust-report';
 import { priceCny, type ChannelDetail, type ChannelStatsView, type MerchantChannel, type ModelDetail, type SiteDetail, type VendorSummary } from '@hub/shared';
 import { getMockAdminModels, getMockAdminVendors } from './admin';
-import { getMockMerchantSites } from './merchant';
+import { getMockMerchantReports, getMockMerchantSites } from './merchant';
 import { mockCommunityStore } from './store';
 
 const emptyStats: ChannelStatsView = {
@@ -13,10 +13,13 @@ const emptyStats: ChannelStatsView = {
 function publicChannel(channel: MerchantChannel, site: SiteDetail): ChannelDetail {
   const models = channel.models.map((item) => {
     const model = getMockAdminModels().find((catalog) => catalog.slug === item.modelSlug);
+    const latest = getMockMerchantReports().find(report => report.channelId === channel.id && report.model === item.upstreamName)
+      ?? (channel.latestReport?.model === item.upstreamName ? channel.latestReport : null);
+    const trustReport = toTrustReportBrief(latest);
     return {
       id: item.id, upstreamName: item.upstreamName, modelSlug: item.modelSlug, displayName: item.displayName,
-      vendorSlug: model?.vendor.slug ?? null, lastStatus: item.lastStatus, trustScore: item.trustScore,
-      trustVerdict: item.trustVerdict, lastLatencyMs: item.lastLatencyMs, lastTestedAt: item.lastTestedAt,
+      vendorSlug: model?.vendor.slug ?? null, lastStatus: item.lastStatus, trustScore: trustReport?.score ?? null,
+      trustVerdict: trustReport?.verdict ?? 'unknown', trustReport, lastLatencyMs: item.lastLatencyMs, lastTestedAt: item.lastTestedAt,
       lastError: item.lastError ? '上游暂时不可用，请稍后重试。' : null,
       inputPriceCny: item.priceOverrideInput ?? priceCny(model?.officialInputPrice, channel.actualRatio),
       outputPriceCny: item.priceOverrideOutput ?? priceCny(model?.officialOutputPrice, channel.actualRatio),
@@ -32,8 +35,9 @@ function publicChannel(channel: MerchantChannel, site: SiteDetail): ChannelDetai
     price: primary?.modelSlug ? { modelSlug: primary.modelSlug, upstreamName: primary.upstreamName,
       inputCny: primary.inputPriceCny, outputCny: primary.outputPriceCny,
       isOverride: primaryMerchant?.priceOverrideInput != null || primaryMerchant?.priceOverrideOutput != null } : null,
-    modelCount: models.length, models, stats: channel.stats ?? { ...emptyStats, trustScore: channel.latestReport?.score ?? null, trustVerdict: channel.latestReport?.verdict ?? 'unknown' }, isFavorite: false,
-    primaryModel: channel.primaryModel, backupModel: channel.backupModel, trustReport: toTrustReportBrief(channel.latestReport), latestReport: channel.latestReport, createdAt: channel.createdAt,
+    modelCount: models.length, models, stats: channel.stats ?? { ...emptyStats, trustScore: channel.latestReport?.score ?? null, trustVerdict: channel.latestReport?.verdict ?? 'unknown' },
+    trustBasis: 'primary', trustReport: toTrustReportBrief(channel.latestReport), fallbackTrustReport: null, isFavorite: false,
+    primaryModel: channel.primaryModel, backupModel: channel.backupModel, latestReport: channel.latestReport, createdAt: channel.createdAt,
   };
 }
 

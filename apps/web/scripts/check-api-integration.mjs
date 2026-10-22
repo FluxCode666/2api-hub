@@ -50,7 +50,7 @@ function stats(value) {
   assert(value.sparkline.length <= 60, 'sparkline 超过 60 格');
 }
 function channel(value) {
-  shape(value, { id: 'number', rank: 'number', name: 'string', description: 'string?', protocol: 'string', billingType: 'string', status: 'string', groupRatio: 'number', rechargeRatio: 'number', actualRatio: 'number', modelCount: 'number', models: 'array', isFavorite: 'boolean' }, 'channel');
+  shape(value, { id: 'number', rank: 'number', name: 'string', description: 'string?', protocol: 'string', billingType: 'string', status: 'string', groupRatio: 'number', rechargeRatio: 'number', actualRatio: 'number', modelCount: 'number', models: 'array', isFavorite: 'boolean', trustBasis: 'string' }, 'channel');
   shape(value.site, { id: 'number', slug: 'string', name: 'string', logoUrl: 'string?', homepageUrl: 'string', type: 'string', isVerified: 'boolean' }, 'channel.site');
   assert(protocolValues.includes(value.protocol), '渠道协议不属于契约枚举');
   assert(Math.abs(value.groupRatio / value.rechargeRatio - value.actualRatio) < 0.0002, '实际倍率与分组/充值倍率不一致');
@@ -58,6 +58,10 @@ function channel(value) {
   if (value.price !== null) shape(value.price, { modelSlug: 'string', upstreamName: 'string', inputCny: 'number?', outputCny: 'number?', isOverride: 'boolean' }, 'price');
   value.models.forEach(item => shape(item, { upstreamName: 'string', modelSlug: 'string?', displayName: 'string?', vendorSlug: 'string?', lastStatus: 'string', trustScore: 'number?', trustVerdict: 'string' }, 'channel.models'));
   assert('trustReport' in value, '渠道缺少 trustReport 字段');
+  assert('fallbackTrustReport' in value, '渠道缺少 fallbackTrustReport 字段');
+  assert(['primary', 'model'].includes(value.trustBasis), '可信分口径无效');
+  briefReport(value.trustReport);
+  briefReport(value.fallbackTrustReport);
   if (value.trustReport !== null) {
     const report = value.trustReport;
     shape(report, { id: 'number', model: 'string', score: 'number?', verdict: 'string', checkedAt: 'iso', checks: 'array' }, 'trustReport');
@@ -70,6 +74,14 @@ function channel(value) {
     }
   }
   stats(value.stats);
+}
+function briefReport(value) {
+  if (value === null) return;
+  shape(value, { id: 'number', model: 'string', score: 'number?', verdict: 'string', checkedAt: 'iso', checks: 'array' }, 'trustReport');
+  for (const check of value.checks) {
+    assert(['connectivity', 'model_echo', 'response_shape', 'token_count', 'knowledge', 'reasoning', 'capability', 'speed'].includes(check.id));
+    assert([true, false, null].includes(check.passed));
+  }
 }
 function site(value) {
   shape(value, { id: 'number', slug: 'string', name: 'string', logoUrl: 'string?', homepageUrl: 'string', type: 'string', description: 'string?', tags: 'array', isVerified: 'boolean', isFeatured: 'boolean', createdAt: 'iso' }, 'site');
@@ -194,7 +206,7 @@ if (!healthy) { await finish(true); } else {
   if (models[0]) await check('模型厂商/关键词筛选', async () => { const selected = models[0]; const { data } = await request(`/models?${new URLSearchParams({ vendor: selected.vendor.slug, q: selected.slug })}`); assert(data.length > 0); assert(data.every(item => item.vendor.slug === selected.vendor.slug && `${item.slug} ${item.displayName}`.toLowerCase().includes(selected.slug.toLowerCase()))); });
   if (channels[0]) {
     const id = channels[0].id;
-    await check('渠道详情与检测报告契约', async () => { const { data } = await request(`/channels/${id}`); channel(data); shape(data, { primaryModel: 'string', backupModel: 'string?', createdAt: 'iso' }); data.models.forEach(item => shape(item, { id: 'number', lastLatencyMs: 'number?', lastTestedAt: 'iso?', lastError: 'string?', inputPriceCny: 'number?', outputPriceCny: 'number?' })); if (data.latestReport !== null) report(data.latestReport); const { data: reports } = await request(`/channels/${id}/reports`); assert(Array.isArray(reports)); reports.forEach(report); });
+    await check('渠道详情与检测报告契约', async () => { const { data } = await request(`/channels/${id}`); channel(data); shape(data, { primaryModel: 'string', backupModel: 'string?', createdAt: 'iso' }); data.models.forEach(item => { shape(item, { id: 'number', lastLatencyMs: 'number?', lastTestedAt: 'iso?', lastError: 'string?', inputPriceCny: 'number?', outputPriceCny: 'number?' }); assert('trustReport' in item); briefReport(item.trustReport); if (item.trustReport) { assert.equal(item.trustReport.model, item.upstreamName); assert.equal(item.trustReport.score, item.trustScore); assert.equal(item.trustReport.verdict, item.trustVerdict); } }); if (data.latestReport !== null) report(data.latestReport); const { data: reports } = await request(`/channels/${id}/reports`); assert(Array.isArray(reports)); reports.forEach(report); });
     await check('渠道站点/厂商/关键词/协议/倍率/阈值组合筛选', async () => {
       const selected = channels[0]; const query = new URLSearchParams({ siteId: String(selected.site.id), q: selected.site.name, protocol: selected.protocol, maxRatio: String(selected.actualRatio + 0.0001), pageSize: '100' });
       if (selected.vendor) query.set('vendor', selected.vendor.slug); if (selected.stats.uptime24h !== null) query.set('minUptime', String(Math.max(0, selected.stats.uptime24h - 0.001))); if (selected.stats.trustScore !== null) query.set('minTrust', String(selected.stats.trustScore));
@@ -223,6 +235,49 @@ if (!healthy) { await finish(true); } else {
     let previous = -Infinity; let nullSeen = false;
     for (const item of data.items) { assert.equal(item.price?.modelSlug, pricedModel.slug); const price = item.price.inputCny; if (price === null) nullSeen = true; else { assert(!nullSeen); assert(price >= previous); previous = price; if (!item.price.isOverride) assert(Math.abs(price - pricedModel.officialInputPrice * item.actualRatio) <= pricedModel.officialInputPrice * 0.0001 + 0.002, '模型输入价未遵循官方价×实际倍率'); } }
   }); else skip('指定模型价格', '无带价格且有渠道的模型');
+  await check('按模型可信分、主测参考与详情摘要一致', async () => {
+    const selected = models.find(item => item.slug === 'claude-opus-5-5') ?? pricedModel;
+    assert(selected, '需要至少一个有渠道的目录模型');
+    const scoped = page((await request(`/channels?model=${encodeURIComponent(selected.slug)}&pageSize=100`)).data, channel);
+    assert(scoped.items.length > 0);
+    for (const item of scoped.items) {
+      assert.equal(item.trustBasis, 'model');
+      const model = item.models.find(model => model.modelSlug === selected.slug);
+      assert(model, '列表必须包含所选模型');
+      if (item.trustReport) { assert.equal(item.trustReport.model, model.upstreamName, '所选模型报告不能冒用主测模型'); assert.equal(item.fallbackTrustReport, null); }
+      else { assert.equal(item.stats.trustScore, null); assert.equal(item.stats.trustVerdict, 'unknown'); }
+      const primary = (await request(`/channels?ids=${item.id}`)).data.items[0];
+      assert.equal(primary.trustBasis, 'primary'); assert.equal(primary.fallbackTrustReport, null);
+      if (item.fallbackTrustReport) assert.deepEqual(item.fallbackTrustReport, primary.trustReport);
+      const detail = (await request(`/channels/${item.id}`)).data;
+      const detailModel = detail.models.find(candidate => candidate.upstreamName === model.upstreamName);
+      assert(detailModel && 'trustReport' in detailModel);
+      assert.deepEqual(item.trustReport, detailModel.trustReport, '榜单与详情模型摘要应同源');
+    }
+    const minTrust = page((await request(`/channels?model=${encodeURIComponent(selected.slug)}&minTrust=80&pageSize=100`)).data, channel);
+    assert(minTrust.items.every(item => item.stats.trustScore >= 80), '可信分筛选必须基于所选模型');
+    for (const [sort, key] of [['trust', 'trustScore'], ['recommend', 'recommendScore']]) {
+      const ranked = page((await request(`/channels?model=${encodeURIComponent(selected.slug)}&sort=${sort}&order=desc&pageSize=100`)).data, channel);
+      let previous = Infinity; let nullSeen = false;
+      for (const item of ranked.items) {
+        const score = item.stats[key];
+        if (score === null) nullSeen = true;
+        else { assert(!nullSeen && score <= previous, `${sort} 排序必须使用所选模型得分，空值排最后`); previous = score; }
+      }
+    }
+    return `检查 ${scoped.items.length} 个渠道；所选模型 ${selected.slug}`;
+  });
+  if (models.some(item => item.slug === 'claude-haiku-5-5')) await check('未检测模型保留 null/unknown 且不参与可信阈值', async () => {
+    const scoped = page((await request('/channels?model=claude-haiku-5-5&pageSize=100')).data, channel);
+    const untested = scoped.items.filter(item => item.trustReport === null);
+    for (const item of untested) {
+      assert.equal(item.stats.trustScore, null, '未检测模型不能回退主测分');
+      assert.equal(item.stats.trustVerdict, 'unknown');
+    }
+    const filtered = page((await request('/channels?model=claude-haiku-5-5&minTrust=1&pageSize=100')).data, channel);
+    assert(filtered.items.every(item => !untested.some(unknown => unknown.id === item.id)));
+    return `${untested.length} 个尚未检测的模型记录；无未检测记录时仅验证阈值筛选`;
+  });
   await check('首页 Top3 与启用公告', async () => { const { data } = await request('/rankings/overview'); shape(data, { updatedAt: 'iso?', models: 'array' }); for (const row of data.models) { model(row.model); assert(Array.isArray(row.top) && row.top.length <= 3); row.top.forEach(channel); } const { data: announcements } = await request('/announcements'); assert(Array.isArray(announcements)); announcements.forEach(item => { shape(item, { id: 'number', title: 'string', contentMd: 'string', enabled: 'boolean', pinned: 'boolean', createdAt: 'iso' }); assert(item.enabled); }); });
   await check('公开校验失败与标准错误结构', async () => { await request('/channels?page=0', { status: 400 }); await request('/channels/2147483647', { status: 404 }); await request('/verify', { method: 'POST', body: {}, status: 400 }); await request('/feedback', { method: 'POST', body: {}, status: 400 }); });
   await check('游客认证/收藏/个人评价/通知均 401', async () => { for (const path of ['/auth/me', '/me/favorites', '/me/reviews', '/me/notifications']) await request(path, { status: 401 }); await request('/me/reviews/2147483647', { method: 'DELETE', status: 401 }); });

@@ -1,114 +1,114 @@
 {
   "apiOrigin": "http://127.0.0.1:8711",
   "webOrigin": "http://127.0.0.1:3210",
-  "writes": false,
-  "retainedAccount": false,
-  "generatedAt": "2026-10-22T08:03:42.099Z",
+  "writes": true,
+  "retainedAccount": true,
+  "generatedAt": "2026-10-22T10:54:51.125Z",
   "blocked": false,
-  "passed": 26,
+  "passed": 30,
   "failed": 0,
-  "skipped": 2,
+  "skipped": 0,
   "checks": [
     {
       "label": "真实 API /healthz",
       "status": "PASS",
-      "ms": 21,
+      "ms": 16,
       "detail": ""
     },
     {
       "label": "公开 /meta /vendors /models 与共享契约",
       "status": "PASS",
-      "ms": 64,
+      "ms": 53,
       "detail": ""
     },
     {
       "label": "公开站点列表分页与契约",
       "status": "PASS",
-      "ms": 17,
+      "ms": 13,
       "detail": ""
     },
     {
       "label": "渠道契约、倍率公式与连续排名",
       "status": "PASS",
-      "ms": 45,
+      "ms": 46,
       "detail": ""
     },
     {
       "label": "公开站点详情与评价分页",
       "status": "PASS",
-      "ms": 27,
+      "ms": 30,
       "detail": ""
     },
     {
       "label": "stableOnly=true 稳定性筛选",
       "status": "PASS",
-      "ms": 15,
+      "ms": 13,
       "detail": ""
     },
     {
       "label": "stableOnly=false 不应开启稳定筛选",
       "status": "PASS",
-      "ms": 15,
+      "ms": 14,
       "detail": ""
     },
     {
       "label": "featured=false 不应只返回精选模型",
       "status": "PASS",
-      "ms": 6,
+      "ms": 8,
       "detail": ""
     },
     {
       "label": "模型厂商/关键词筛选",
       "status": "PASS",
-      "ms": 11,
+      "ms": 7,
       "detail": ""
     },
     {
       "label": "渠道详情与检测报告契约",
       "status": "PASS",
-      "ms": 21,
+      "ms": 15,
       "detail": ""
     },
     {
       "label": "渠道站点/厂商/关键词/协议/倍率/阈值组合筛选",
       "status": "PASS",
-      "ms": 12,
+      "ms": 9,
       "detail": ""
     },
     {
       "label": "渠道 history 1h",
       "status": "PASS",
-      "ms": 9,
+      "ms": 5,
       "detail": ""
     },
     {
       "label": "渠道 history 24h",
       "status": "PASS",
-      "ms": 7,
+      "ms": 5,
       "detail": ""
     },
     {
       "label": "渠道 history 7d",
       "status": "PASS",
-      "ms": 7,
+      "ms": 6,
       "detail": ""
     },
     {
       "label": "渠道 history 30d",
       "status": "PASS",
-      "ms": 7,
+      "ms": 6,
       "detail": ""
     },
     {
       "label": "公开探测日志服务端分页、失败筛选与标准错误",
       "status": "PASS",
-      "ms": 52,
+      "ms": 45,
       "detail": ""
     },
     {
       "label": "按 ids 批量对比",
       "status": "PASS",
-      "ms": 8,
+      "ms": 6,
       "detail": ""
     },
     {
@@ -124,9 +124,21 @@
       "detail": ""
     },
     {
+      "label": "按模型可信分、主测参考与详情摘要一致",
+      "status": "PASS",
+      "ms": 233,
+      "detail": "检查 12 个渠道；所选模型 claude-opus-5-5"
+    },
+    {
+      "label": "未检测模型保留 null/unknown 且不参与可信阈值",
+      "status": "PASS",
+      "ms": 15,
+      "detail": "3 个尚未检测的模型记录；无未检测记录时仅验证阈值筛选"
+    },
+    {
       "label": "首页 Top3 与启用公告",
       "status": "PASS",
-      "ms": 33,
+      "ms": 20,
       "detail": ""
     },
     {
@@ -138,44 +150,44 @@
     {
       "label": "游客认证/收藏/个人评价/通知均 401",
       "status": "PASS",
-      "ms": 9,
+      "ms": 7,
       "detail": ""
     },
     {
       "label": "真实登录 Cookie、会话、用户接口与 admin 403",
       "status": "PASS",
-      "ms": 159,
+      "ms": 85,
       "detail": ""
     },
     {
       "label": "个人收藏服务端分页与跨页连续排名",
       "status": "PASS",
-      "ms": 54,
+      "ms": 44,
       "detail": ""
     },
     {
       "label": "站内通知服务端分页、全局未读数与输入校验",
       "status": "PASS",
-      "ms": 36,
+      "ms": 21,
       "detail": ""
     },
     {
-      "label": "用户写入与 MyReview CRUD",
-      "status": "SKIP",
-      "ms": 0,
-      "detail": "设置 HUB_INTEGRATION_WRITES=1 执行"
+      "label": "注册→收藏→我的评价分页/更新/越权/删除→清理",
+      "status": "PASS",
+      "ms": 146,
+      "detail": "测试收藏与评价已清理；无删除用户接口，保留一个无业务数据测试账号"
     },
     {
       "label": "Next 同源 API 代理与真实 Cookie",
       "status": "PASS",
-      "ms": 71,
+      "ms": 35,
       "detail": ""
     },
     {
-      "label": "实际快速鉴定",
-      "status": "SKIP",
-      "ms": 0,
-      "detail": "未提供 HUB_VERIFY_BASE_URL / HUB_VERIFY_API_KEY / HUB_VERIFY_MODEL，仅检查了输入校验"
+      "label": "实际快速鉴定报告契约与 Key 不回传",
+      "status": "PASS",
+      "ms": 1553,
+      "detail": ""
     }
   ]
 }

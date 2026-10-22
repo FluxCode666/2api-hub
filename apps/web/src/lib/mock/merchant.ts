@@ -1,9 +1,9 @@
-import { actualRatio, AUTH_CHECKS } from '@hub/shared';
+import { actualRatio, AUTH_CHECKS, computeRecommendScore } from '@hub/shared';
 import type { AuthenticityReport, ChannelInput, ChannelModelsInput, MerchantChannel, MerchantChannelModel, MerchantOverview, MerchantSite, MerchantSiteDetail, Paginated, ProbeResult, ProbeRun, ProbeTask, SessionUser, SiteInput } from '@hub/shared';
-import { mockChannels, mockModels, mockSites, mockUsers, mockVendors } from './fixtures';
+import { mockChannels, mockModelReports, mockModels, mockSites, mockUsers, mockVendors } from './fixtures';
 import { MockError } from './error';
 
-type State = { sites: MerchantSiteDetail[]; owners: Record<number, string>; invalidKeys: Record<number, boolean>; manualChecks: Record<number, string[]>; tasks: ProbeTask[]; runs: ProbeRun[]; nextSite: number; nextChannel: number; nextTask: number };
+type State = { sites: MerchantSiteDetail[]; owners: Record<number, string>; invalidKeys: Record<number, boolean>; manualChecks: Record<number, string[]>; tasks: ProbeTask[]; runs: ProbeRun[]; reports: AuthenticityReport[]; nextSite: number; nextChannel: number; nextTask: number };
 const scope = globalThis as typeof globalThis & { __hubMerchantMock?: State };
 const now = () => new Date().toISOString();
 const maskKey = (key: string) => `sk-****${key.length > 4 ? key.slice(-4) : ''}`;
@@ -12,7 +12,7 @@ function modelItem(upstreamName: string, id: number): MerchantChannelModel {
   return { id, upstreamName, modelSlug: model?.slug ?? null, displayName: model?.displayName ?? null, priceOverrideInput: null, priceOverrideOutput: null, lastStatus: 'untested', lastLatencyMs: null, lastTestedAt: null, lastError: null, trustScore: null, trustVerdict: 'unknown' };
 }
 function state(): State {
-  if (scope.__hubMerchantMock) { scope.__hubMerchantMock.manualChecks ??= {}; return scope.__hubMerchantMock; }
+  if (scope.__hubMerchantMock) { scope.__hubMerchantMock.manualChecks ??= {}; scope.__hubMerchantMock.reports ??= structuredClone(mockModelReports); return scope.__hubMerchantMock; }
   const owner = mockUsers.find((u) => u.role === 'merchant')?.id ?? 'mock-merchant';
   const sites: MerchantSiteDetail[] = mockSites.map((s) => ({ id: s.id, slug: s.slug, name: s.name, homepageUrl: s.homepageUrl, inviteUrl: null, logoUrl: s.logoUrl, description: s.description, type: s.type, rechargeRatio: s.rechargeRatio, contact: s.contact, tags: s.tags, paymentMethods: s.paymentMethods, status: 'approved', reviewNote: null, submittedAt: s.createdAt, approvedAt: s.approvedAt, isVerified: s.isVerified, isFeatured: s.isFeatured, channelCount: s.channels.length, stats: s.stats, createdAt: s.createdAt, updatedAt: s.createdAt, channels: mockChannels.filter((c) => c.site.id === s.id).map((c) => ({ id: c.id, siteId: s.id, name: c.name, description: c.description, vendor: c.vendor, protocol: c.protocol, baseUrl: 'https://api.example.com', apiKeyMask: 'sk-****demo', groupRatio: c.groupRatio, actualRatio: c.actualRatio, billingType: c.billingType, primaryModel: c.primaryModel, backupModel: c.backupModel, rpmLimit: 120, status: c.status, probeEnabled: true, probeIntervalSec: 600, lastTestOk: c.stats.consecutiveFailures === 0, lastTestAt: c.stats.lastProbeAt, models: c.models.map((m) => ({ id: m.id, upstreamName: m.upstreamName, modelSlug: m.modelSlug, displayName: m.displayName, priceOverrideInput: null, priceOverrideOutput: null, lastStatus: m.lastStatus, lastLatencyMs: m.lastLatencyMs, lastTestedAt: m.lastTestedAt, lastError: m.lastError, trustScore: m.trustScore, trustVerdict: m.trustVerdict })), stats: c.stats, latestReport: c.latestReport, createdAt: c.createdAt, updatedAt: c.createdAt })) }));
   let nextSite = Math.max(0, ...sites.map((s) => s.id)) + 1;
@@ -25,7 +25,7 @@ function state(): State {
     site.channels = [channel]; if (site.stats) site.stats.channelCount = 1; sites.push(site);
   }
   const runs: ProbeRun[] = mockChannels.flatMap((c) => c.stats.sparkline.map((p, i) => ({ id: c.id * 1000 + i, channelId: c.id, model: c.primaryModel, protocol: c.protocol, kind: 'availability', trigger: 'schedule', success: p.ok, httpStatus: p.ok ? 200 : 502, errorCode: p.ok ? null : 'http_5xx', errorMessage: p.ok ? null : '上游暂时不可用', latencyMs: p.ms, ttftMs: p.ms === null ? null : Math.round(p.ms * .4), outputTokens: p.ok ? 4 : null, tokensPerSec: p.ok ? 75 : null, createdAt: p.t })));
-  scope.__hubMerchantMock = structuredClone({ sites, owners: Object.fromEntries(sites.map((s) => [s.id, owner])), invalidKeys: {}, manualChecks: {}, tasks: [], runs, nextSite, nextChannel, nextTask: 1 });
+  scope.__hubMerchantMock = structuredClone({ sites, owners: Object.fromEntries(sites.map((s) => [s.id, owner])), invalidKeys: {}, manualChecks: {}, tasks: [], runs, reports: mockModelReports, nextSite, nextChannel, nextTask: 1 });
   return scope.__hubMerchantMock;
 }
 export function getMockMerchantSites(): MerchantSiteDetail[] { return state().sites; }
@@ -37,6 +37,7 @@ export function updateMockMerchantSite(id: number, patch: Partial<MerchantSite>)
 }
 export function getMockMerchantTasks(): ProbeTask[] { state().tasks.forEach(advanceTask); return state().tasks; }
 export function getMockMerchantRuns(): ProbeRun[] { return state().runs; }
+export function getMockMerchantReports(): AuthenticityReport[] { return state().reports; }
 function visible(user: SessionUser) { return state().sites.filter((s) => user.role === 'admin' || state().owners[s.id] === user.id); }
 function ownSite(id: number, user: SessionUser) {
   const site = visible(user).find((s) => s.id === id);
@@ -64,9 +65,12 @@ function advanceTask(task: ProbeTask) {
   if (!channel) { task.status = 'failed'; task.error = '渠道已删除'; task.finishedAt = now(); return; }
   const pass = !state().invalidKeys[channel.id] && !channel.baseUrl.includes('/dead');
   const report: AuthenticityReport = { id: task.id + 10000, channelId: channel.id, model: task.payload.models?.[0] ?? channel.primaryModel, protocol: channel.protocol, score: pass ? 95 : 10, verdict: pass ? 'genuine' : 'fake', checks: AUTH_CHECKS.map((c) => ({ id: c.id, name: c.name, weight: c.weight, passed: pass, detail: pass ? '检测样本符合目录模型特征。' : '样本未通过对应特征检查。' })), durationMs: 2800, trigger: task.trigger, createdAt: now() };
-  task.status = 'done'; task.result = report; task.finishedAt = now(); channel.latestReport = report;
-  channel.models.forEach((m) => { if (!task.payload.models?.length || task.payload.models.includes(m.upstreamName)) { m.trustScore = report.score; m.trustVerdict = report.verdict; } });
-  if (channel.stats) { channel.stats.trustScore = report.score; channel.stats.trustVerdict = report.verdict; }
+  task.status = 'done'; task.result = report; task.finishedAt = now(); state().reports.unshift(report);
+  channel.models.forEach((m) => { if (m.upstreamName === report.model) { m.trustScore = report.score; m.trustVerdict = report.verdict; } });
+  if (report.model === channel.primaryModel) {
+    channel.latestReport = report;
+    if (channel.stats) { channel.stats.trustScore = report.score; channel.stats.trustVerdict = report.verdict; channel.stats.recommendScore = computeRecommendScore(channel.stats); }
+  }
 }
 function validateSite(input: SiteInput) {
   if (!input.name?.trim() || !input.homepageUrl || !Number.isFinite(input.rechargeRatio) || input.rechargeRatio <= 0) throw new MockError(400, 'validation', '请填写站点名称、官网和有效充值倍率');
@@ -101,10 +105,9 @@ export async function mockMerchant(path: string, method: string, body: unknown, 
     if (!action && method === 'GET') return site;
     if (!action && method === 'PATCH') {
       const input = { ...site, ...body as Partial<SiteInput> }; validateSite(input);
-      const prevRatio = site.rechargeRatio;
       const fields: (keyof SiteInput)[] = ['name', 'homepageUrl', 'inviteUrl', 'logoUrl', 'description', 'type', 'rechargeRatio', 'contact', 'tags', 'paymentMethods'];
       const patch = Object.fromEntries(fields.filter((key) => key in (body as object)).map((key) => [key, input[key]]));
-      Object.assign(site, patch, { updatedAt: now() }); site.channels.forEach((c) => { c.actualRatio = actualRatio(c.groupRatio, site.rechargeRatio); if (prevRatio !== site.rechargeRatio && site.status === 'approved') createTask(c.id, 'merchant'); }); return site;
+      Object.assign(site, patch, { updatedAt: now() }); site.channels.forEach((c) => { c.actualRatio = actualRatio(c.groupRatio, site.rechargeRatio); }); return site;
     }
     if (!action && method === 'DELETE') {
       if (!['draft', 'rejected'].includes(site.status)) throw new MockError(409, 'site_locked', '仅草稿或被驳回的站点可删除');
@@ -130,7 +133,7 @@ export async function mockMerchant(path: string, method: string, body: unknown, 
     if (!action && method === 'PATCH') {
       const input = body as Partial<ChannelInput>; const merged: ChannelInput = { ...channel, ...input }; validateChannel(merged);
       const connectionChanged = (input.baseUrl !== undefined && input.baseUrl !== channel.baseUrl) || Boolean(input.apiKey) || (input.primaryModel !== undefined && input.primaryModel !== channel.primaryModel) || (input.protocol !== undefined && input.protocol !== channel.protocol);
-      const critical = connectionChanged || (input.groupRatio !== undefined && input.groupRatio !== channel.groupRatio);
+      const critical = connectionChanged;
       const { apiKey: _apiKey, declaredModels: _declaredModels, vendorSlug: _vendorSlug, ...values } = input;
       Object.assign(channel, values, { updatedAt: now() });
       if (input.apiKey) { channel.apiKeyMask = maskKey(input.apiKey); db.invalidKeys[channel.id] = input.apiKey === 'invalid-key'; }

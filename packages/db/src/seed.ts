@@ -128,6 +128,12 @@ interface ChannelDef {
   site: number; // SITE_DEFS 下标
   name: string; vendor: string; protocol: ChannelProtocol; scenario: Scenario; groupRatio: number;
   priceOverride?: { input: number; output: number };
+  /** 按模型覆盖场景（混合场景）：主测用 scenario，被覆盖的模型用指定 scenario */
+  modelOverrides?: Record<string, Scenario>;
+  /** 额外声明的模型（跨厂商/非主测），加入 channel_models 但不改 primaryModel */
+  extraModels?: string[];
+  /** 不为这些模型生成报告（fallback 示例用） */
+  skipReportFor?: string[];
 }
 const CHANNEL_DEFS: ChannelDef[] = [
   { site: 0, name: 'Claude 官转', vendor: 'anthropic', protocol: 'anthropic', scenario: 'genuine', groupRatio: 1 },
@@ -164,6 +170,19 @@ const CHANNEL_DEFS: ChannelDef[] = [
   { site: 11, name: '全模型失效线', vendor: 'openai', protocol: 'openai_chat', scenario: 'fake', groupRatio: 0.08 },
   { site: 12, name: 'Kimi 新站', vendor: 'moonshot', protocol: 'openai_chat', scenario: 'genuine', groupRatio: 0.5 },
   { site: 13, name: 'Claude 新站', vendor: 'anthropic', protocol: 'anthropic', scenario: 'downgraded', groupRatio: 0.3 },
+  // 混合场景（按模型口径演示）：被覆盖的必须是非主测的声明模型
+  // Claude 混线：主测 claude-fable-5-1（genuine），声明 claude-opus-5-5 被换皮
+  { site: 0, name: 'Claude 混线（Opus 换皮）', vendor: 'anthropic', protocol: 'anthropic', scenario: 'genuine', groupRatio: 0.6,
+    modelOverrides: { 'claude-opus-5-5': 'fake' } },
+  // GPT 混线：主测 gpt-6.1-sol（fast），声明 gpt-6-astra 被降智
+  { site: 3, name: 'GPT 混线（Astra 降智）', vendor: 'openai', protocol: 'openai_responses', scenario: 'fast', groupRatio: 0.7,
+    modelOverrides: { 'gpt-6-astra': 'downgraded' } },
+  // Gemini 混线：主测 gemini-3.8-flash（genuine），声明 deepseek-v4.1-flash 被换皮
+  { site: 5, name: 'Gemini 混线（DeepSeek 换皮）', vendor: 'google', protocol: 'gemini', scenario: 'genuine', groupRatio: 0.3,
+    modelOverrides: { 'deepseek-v4.1-flash': 'fake' } },
+  // fallback 示例：声明 claude-haiku-5-5（非精选）但不生成报告，主测 claude-fable-5-1 照常有报告
+  { site: 6, name: 'Claude 全模型（Haiku 未检测）', vendor: 'anthropic', protocol: 'anthropic', scenario: 'genuine', groupRatio: 0.8,
+    extraModels: ['claude-haiku-5-5'], skipReportFor: ['claude-haiku-5-5'] },
 ];
 
 // ---------- 真伪检测 checks 构造 ----------
@@ -204,12 +223,27 @@ function buildChecks(cls: CheckClass): AuthenticityCheck[] {
   });
 }
 
-const VERDICT_OF: Record<CheckClass, { score: () => number | null; verdict: TrustVerdict }> = {
-  genuine: { score: () => randInt(90, 100), verdict: 'genuine' },
-  downgraded: { score: () => randInt(50, 70), verdict: 'suspect' },
-  fake: { score: () => randInt(10, 35), verdict: 'fake' },
-  dead: { score: () => null, verdict: 'unknown' },
-};
+/** 从 checks 权重算出 score（SPEC §5.3：Σ(通过项权重) / Σ(已执行项权重) × 100；部分得分项按 score 比例计入） */
+function scoreFromChecks(checks: AuthenticityCheck[]): number | null {
+  let earned = 0;
+  let total = 0;
+  for (const c of checks) {
+    if (c.passed === null) continue; // 未执行不计
+    total += c.weight;
+    // passed=true 且 score 存在时按 score 比例（如推理题 2/3），否则按 passed 布尔
+    earned += c.weight * (c.score ?? (c.passed ? 1 : 0));
+  }
+  if (total < 30) return null; // 已执行权重和 < 30 → unknown
+  return Math.round((earned / total) * 100);
+}
+
+/** 从 score 推 verdict（与 SPEC §5.3 一致：≥80 genuine、50–79 suspect、<50 fake、null/权重不足 unknown） */
+function verdictFromScore(score: number | null): TrustVerdict {
+  if (score === null) return 'unknown';
+  if (score >= 80) return 'genuine';
+  if (score >= 50) return 'suspect';
+  return 'fake';
+}
 
 // ---------- 主流程 ----------
 const { db, sql } = createDb(process.env.DATABASE_URL, { max: 4 });
@@ -322,8 +356,31 @@ try {
     const pool = modelsByVendor.get(def.vendor) ?? [];
     // 每渠道 2–6 个模型：优先同厂商，缺别名变体补足（如 google 只有一个模型）
     const upstreamNames: { name: string; modelId: number | null }[] = [];
+    // 混合场景：确保被覆盖的模型在声明列表中
+    const overrideModels = new Set(Object.keys(def.modelOverrides ?? {}));
     for (const m of pool.slice(0, randInt(2, Math.min(4, pool.length)))) {
       upstreamNames.push({ name: m.aliases[0]!, modelId: modelIdByAlias.get(m.aliases[0]!.toLowerCase()) ?? null });
+    }
+    // 把被覆盖的模型加进声明列表（如果不在的话）
+    for (const overrideName of overrideModels) {
+      if (!upstreamNames.some((u) => u.name === overrideName)) {
+        // 找目录模型 id（跨厂商也支持）
+        const catalogModel = modelRows.find((m) => m.aliases.some((a) => a.toLowerCase() === overrideName.toLowerCase()));
+        upstreamNames.push({
+          name: overrideName,
+          modelId: catalogModel ? catalogModel.id : null,
+        });
+      }
+    }
+    // extraModels：额外声明的模型（fallback 示例等）
+    for (const extraName of def.extraModels ?? []) {
+      if (!upstreamNames.some((u) => u.name === extraName)) {
+        const catalogModel = modelRows.find((m) => m.aliases.some((a) => a.toLowerCase() === extraName.toLowerCase()));
+        upstreamNames.push({
+          name: extraName,
+          modelId: catalogModel ? catalogModel.id : null,
+        });
+      }
     }
     if (upstreamNames.length < 2 && pool.length > 0) {
       const m = pool[0]!;
@@ -332,7 +389,13 @@ try {
         upstreamNames.push({ name: alias, modelId: modelIdByAlias.get(alias.toLowerCase()) ?? null });
       }
     }
-    const primaryModel = upstreamNames[0]!.name;
+    // 主测模型不能是被覆盖的模型（混合场景的主测必须 genuine）
+    let primaryModel = upstreamNames[0]!.name;
+    if (overrideModels.has(primaryModel) && upstreamNames.length > 1) {
+      // 找第一个不被覆盖的模型作为主测
+      const nonOverridden = upstreamNames.find((u) => !overrideModels.has(u.name));
+      if (nonOverridden) primaryModel = nonOverridden.name;
+    }
     const apiKeyPlain = `sk-demo-${randomToken()}`;
     const actual = actualRatio(def.groupRatio, site.rechargeRatio);
     const [ch] = await db.insert(channels).values({
@@ -341,7 +404,10 @@ try {
       description: `${site.name} 的 ${def.name} 分组（实际倍率 ${actual}）`,
       vendorId: vendorIdBySlug.get(def.vendor) ?? null,
       protocol: def.protocol,
-      baseUrl: `http://127.0.0.1:8712/${def.scenario}`,
+      // 混合场景：base_url 用覆盖语法 genuine,opus=fake
+      baseUrl: def.modelOverrides
+        ? `http://127.0.0.1:8712/${def.scenario},${Object.entries(def.modelOverrides).map(([m, s]) => `${m}=${s}`).join(',')}`
+        : `http://127.0.0.1:8712/${def.scenario}`,
       apiKeyEnc: encryptSecret(apiKeyPlain),
       apiKeyMask: maskSecret(apiKeyPlain),
       groupRatio: def.groupRatio,
@@ -429,12 +495,14 @@ try {
   let reportCount = 0;
   for (const sc of seededChannels) {
     const cls = checkClassOf(sc.def.scenario);
-    const meta = VERDICT_OF[cls];
     const reportN = randInt(1, 3);
     let latest: { score: number | null; verdict: TrustVerdict; at: Date } | null = null;
     const primaryCm = sc.cmIds.find((c) => c.upstreamName === sc.primaryModel)!;
+
+    // 主测模型报告（用渠道 scenario；score 从 checks 权重算出，与前端公式一致）
     for (let i = 0; i < reportN; i++) {
-      const score = meta.score();
+      const checks = buildChecks(cls);
+      const score = scoreFromChecks(checks);
       const createdAt = new Date(Date.now() - rand(0, 3) * 86400_000);
       await db.insert(authenticityReports).values({
         channelId: sc.id,
@@ -442,18 +510,53 @@ try {
         model: sc.primaryModel,
         protocol: sc.def.protocol,
         score,
-        verdict: meta.verdict,
-        checks: buildChecks(cls),
+        verdict: verdictFromScore(score),
+        checks,
         durationMs: randInt(8000, 45000),
         trigger: (i === 0 ? 'onboarding' : 'schedule') as 'onboarding' | 'schedule',
         createdAt,
       });
       reportCount++;
-      if (!latest || createdAt > latest.at) latest = { score, verdict: meta.verdict, at: createdAt };
+      if (!latest || createdAt > latest.at) latest = { score, verdict: verdictFromScore(score), at: createdAt };
     }
-    // 回写 channel_models
+
+    // 混合场景：为被覆盖的声明模型生成对应 scenario 的报告
+    const overrides = sc.def.modelOverrides ?? {};
+    const modelTrust = new Map<string, { score: number | null; verdict: TrustVerdict; at: Date }>();
+    for (const cm of sc.cmIds) {
+      const overrideScenario = overrides[cm.upstreamName];
+      if (overrideScenario) {
+        const ocls = checkClassOf(overrideScenario);
+        const ochecks = buildChecks(ocls);
+        const oscore = scoreFromChecks(ochecks);
+        const ocreatedAt = new Date(Date.now() - rand(0, 2) * 86400_000);
+        await db.insert(authenticityReports).values({
+          channelId: sc.id,
+          channelModelId: cm.id,
+          model: cm.upstreamName,
+          protocol: sc.def.protocol,
+          score: oscore,
+          verdict: verdictFromScore(oscore),
+          checks: ochecks,
+          durationMs: randInt(8000, 45000),
+          trigger: 'schedule' as const,
+          createdAt: ocreatedAt,
+        });
+        reportCount++;
+        modelTrust.set(cm.upstreamName, { score: oscore, verdict: verdictFromScore(oscore), at: ocreatedAt });
+      }
+    }
+
+    // 回写 channel_models：只有主测模型和被覆盖模型有 trust；其他声明模型保持 null/unknown（未检测）
+    const skipSet = new Set(sc.def.skipReportFor ?? []);
     const testedAt = latest!.at;
     for (const cm of sc.cmIds) {
+      if (skipSet.has(cm.upstreamName)) continue; // 不写 trust 字段
+      const isPrimary = cm.upstreamName === sc.primaryModel;
+      const cmTrust = modelTrust.get(cm.upstreamName);
+      // 只有主测模型用渠道级 trust；其他模型只在有覆盖报告时才写 trust
+      if (!isPrimary && !cmTrust) continue; // 非主测且无覆盖报告 → 保持 null/unknown
+      const trust = isPrimary ? { score: latest!.score, verdict: latest!.verdict, at: testedAt } : cmTrust!;
       let lastStatus: 'pass' | 'fail' = 'pass';
       let lastError: string | null = null;
       if (sc.def.scenario === 'dead') {
@@ -468,9 +571,9 @@ try {
         lastError,
         lastLatencyMs: lastStatus === 'pass' ? sc.lastOkLatency : null,
         lastTestedAt: testedAt,
-        trustScore: latest!.score,
-        trustVerdict: latest!.verdict,
-        trustCheckedAt: testedAt,
+        trustScore: trust.score,
+        trustVerdict: trust.verdict,
+        trustCheckedAt: trust.at,
       }).where(eq(channelModels.id, cm.id));
     }
   }

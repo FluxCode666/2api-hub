@@ -184,6 +184,8 @@ export const channelModels = pgTable('channel_models', {
   trustScore: integer('trust_score'),
   trustVerdict: trustVerdict('trust_verdict').notNull().default('unknown'),
   trustCheckedAt: ts('trust_checked_at'),
+  // 以该模型自身可信分计算的推荐分（worker 聚合写入；按模型筛选榜单时使用）
+  recommendScore: doublePrecision('recommend_score'),
   createdAt: createdAt(),
 }, (t) => [
   uniqueIndex('channel_models_uq').on(t.channelId, t.upstreamName),

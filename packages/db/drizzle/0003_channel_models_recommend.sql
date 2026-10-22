@@ -1,0 +1,1 @@
+ALTER TABLE "channel_models" ADD COLUMN "recommend_score" double precision;

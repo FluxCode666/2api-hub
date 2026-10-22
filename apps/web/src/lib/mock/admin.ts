@@ -2,7 +2,7 @@ import {themes} from '@/lib/theme';
 import { actualRatio, computeRecommendScore, DEFAULT_SETTINGS } from '@hub/shared';
 import type { AdminChannel, AdminModel, AdminOverview, AdminReview, AdminSite, AdminSiteDetail, AdminUser, AdminVendor, Announcement, AuditLog, ChannelInput, FeedbackItem, MerchantChannel, ModelInput, Paginated, ProbeKind, ProbeRun, ProbeTask, ReviewStatus, Role, SessionUser, SettingsMap, SiteInput, SiteReviewAction, VendorInput, VendorRef } from '@hub/shared';
 import { mockAnnouncements, mockModels, mockReport, mockUsers, mockVendors } from './fixtures';
-import { getMockMerchantOwner, getMockMerchantRuns, getMockMerchantSites, getMockMerchantTasks, updateMockMerchantSite } from './merchant';
+import { getMockMerchantOwner, getMockMerchantReports, getMockMerchantRuns, getMockMerchantSites, getMockMerchantTasks, updateMockMerchantSite } from './merchant';
 import { mockCommunityStore } from './store';
 import { MockError } from './error';
 
@@ -32,7 +32,7 @@ function siteDetail(id: number): AdminSiteDetail {
   if (!site) throw new MockError(404, 'not_found', '站点不存在');
   const owner = mockCommunityStore.users.find(user => user.id === getMockMerchantOwner(id)) ?? mockUsers.find(user => user.role === 'merchant') ?? mockUsers[0]!;
   const extra = state().siteExtras[id] ?? { sortWeight: 0, clickCount: 0 };
-  return { ...site, ...extra, owner: { id: owner.id, email: owner.email, nickname: owner.nickname }, reports: site.channels.flatMap(channel => channel.latestReport ? [channel.latestReport] : []) };
+  return { ...site, ...extra, owner: { id: owner.id, email: owner.email, nickname: owner.nickname }, reports: getMockMerchantReports().filter(report => site.channels.some(channel => channel.id === report.channelId)) };
 }
 function channelById(id: number) {
   const site = getMockMerchantSites().find(item => item.channels.some(channel => channel.id === id));
@@ -56,7 +56,8 @@ function advanceTasks() {
       if (task.kind === 'authenticity') {
         const report = { ...structuredClone(mockReport), id: state().nextId++, channelId: channel.id, model: channel.primaryModel, protocol: channel.protocol, trigger: 'admin' as const, createdAt: now() };
         channel.latestReport = report; task.result = report;
-        channel.models.forEach(model => { model.trustScore = report.score; model.trustVerdict = report.verdict; });
+        getMockMerchantReports().unshift(report);
+        channel.models.forEach(model => { if (model.upstreamName === report.model) { model.trustScore = report.score; model.trustVerdict = report.verdict; } });
         if (channel.stats) { channel.stats.trustScore = report.score; channel.stats.trustVerdict = report.verdict; }
       } else if (task.kind === 'availability') {
         const ok = !channel.baseUrl.includes('/dead');
@@ -128,7 +129,7 @@ export async function mockAdmin(path: string, method: string, body: unknown, use
       const patch = Object.fromEntries(allowed.filter(key => input[key] !== undefined).map(key => [key, input[key]]));
       const updated = updateMockMerchantSite(id, patch)!;
       if (input.sortWeight !== undefined) db.siteExtras[id] = { sortWeight: input.sortWeight, clickCount: site.clickCount };
-      updated.channels.forEach(channel => { channel.actualRatio = actualRatio(channel.groupRatio, updated.rechargeRatio); if (input.rechargeRatio !== undefined && input.rechargeRatio !== site.rechargeRatio && updated.status === 'approved') createTask(channel.id, 'authenticity'); });
+      updated.channels.forEach(channel => { channel.actualRatio = actualRatio(channel.groupRatio, updated.rechargeRatio); });
       audit(user, 'site.update', 'site', id, record(body)); return siteDetail(id);
     }
   }
@@ -145,7 +146,7 @@ export async function mockAdmin(path: string, method: string, body: unknown, use
       if (input.groupRatio !== undefined && (!Number.isFinite(input.groupRatio) || input.groupRatio <= 0)) throw new MockError(400, 'validation', '分组倍率必须大于 0');
       if (input.probeIntervalSec !== undefined && (!Number.isInteger(input.probeIntervalSec) || input.probeIntervalSec < 30)) throw new MockError(400, 'validation', '探测间隔至少为 30 秒');
       if (input.status && !['active', 'paused', 'invalid'].includes(input.status)) throw new MockError(400, 'validation', '渠道状态不合法');
-      const critical = input.baseUrl !== undefined && input.baseUrl !== channel.baseUrl || input.groupRatio !== undefined && input.groupRatio !== channel.groupRatio || Boolean(input.apiKey);
+      const critical = input.baseUrl !== undefined && input.baseUrl !== channel.baseUrl || input.protocol !== undefined && input.protocol !== channel.protocol || input.primaryModel !== undefined && input.primaryModel !== channel.primaryModel || Boolean(input.apiKey);
       const allowed = ['name', 'description', 'protocol', 'baseUrl', 'groupRatio', 'billingType', 'primaryModel', 'backupModel', 'rpmLimit', 'status', 'probeEnabled', 'probeIntervalSec'] as const;
       Object.assign(channel, Object.fromEntries(allowed.filter(key => input[key] !== undefined).map(key => [key, input[key]])), { updatedAt: now() });
       if (input.apiKey) channel.apiKeyMask = `sk-****${input.apiKey.slice(-4)}`;

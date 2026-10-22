@@ -72,6 +72,7 @@ assertSafeUrl(url, allowPrivate?): Promise<void>               // 唯一会抛�
 由 subagent 实现，交付说明见 `docs/handoff/mock-upstream-subagent.md`。要点：
 
 - Node 原生 http，无框架；路径前缀 `/\<scenario\>/v1/...`；4 协议流式+非流式 + `/v1/models` + `/v1beta/models`
+- **按模型覆盖场景**（CONTRACT-CHANGES 2026-10-22）：scenario 段支持 `\<默认场景\>[,\<模型子串\>=\<场景\>]*`，如 `genuine,opus=fake`——请求模型名含 `opus` 按 fake 响应，其余按 genuine；多覆盖按出现顺序首个命中；`%2C`/`%3D` 编码兼容；`/v1/models` 不受影响；覆盖场景的错误注入（如 `opus=dead`）同样按生效场景执行。用于演示「同一渠道主测真、某模型换皮」
 - usage 与 calibration.ts 对齐：genuine 按厂商系数（anthropic genuine BENCHMARK 请求实测 input=178，精确命中期望）；downgraded 统一 o200k+8（=150/156，落在 anthropic 期望区间 [160,196] 外 → token_count 判负）；fake 不返回 usage
 - 启动：`pnpm --filter @hub/mock-upstream dev`（tsx watch），监听 127.0.0.1:8712，`MOCK_UPSTREAM_PORT` 可覆盖
 

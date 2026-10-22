@@ -24,6 +24,16 @@ export interface AggregateResult {
   failedChannels: number;
 }
 
+/** 模型级推荐分 SELECT 行 */
+interface ModelScoreRow extends Record<string, unknown> {
+  cm_id: number;
+  uptime_24h: string | null;
+  samples_24h: number | null;
+  latency_p50_24h: number | null;
+  consecutive_failures: number | null;
+  trust_score: number | null;
+}
+
 /** db.execute 的行类型（要求 Record 索引签名；时间列为 ISO 字符串） */
 export interface AggRow extends Record<string, unknown> {
   channel_id: number;
@@ -283,6 +293,78 @@ export async function runAggregation(db: Database, opts: AggregateOptions): Prom
         updated_at = EXCLUDED.updated_at
     `);
     siteCount += 1;
+  }
+
+  // ---- 自愈同步：channel_models trust 字段 ← 最新 authenticity_report ----
+  // 数据一致性保证（不依赖每个写入方都写对）：按 (channel_id, model) 取最新报告
+  // （created_at DESC, id DESC），同步 trust_score/trust_verdict/trust_checked_at；
+  // 只更新值不同的行，避免无谓写入。必须在「模型级推荐分」之前，
+  // 保证推荐分用同步后的可信分；主测模型同步后 channel_stats.trust_score
+  // 也自然一致（它原本就取主测模型最新报告）。
+  try {
+    await db.execute(sql`
+      WITH latest AS (
+        SELECT DISTINCT ON (channel_id, model)
+          channel_id, model, score, verdict, created_at
+        FROM authenticity_reports
+        ORDER BY channel_id, model, created_at DESC, id DESC
+      )
+      UPDATE channel_models cm
+      SET trust_score = l.score, trust_verdict = l.verdict, trust_checked_at = l.created_at
+      FROM latest l
+      WHERE cm.channel_id = l.channel_id
+        AND cm.upstream_name = l.model
+        AND (cm.trust_score IS DISTINCT FROM l.score
+             OR cm.trust_verdict <> l.verdict
+             OR cm.trust_checked_at IS DISTINCT FROM l.created_at)
+    `);
+  } catch (err: unknown) {
+    console.error('[aggregate] trust self-heal failed:', err instanceof Error ? err.message : err);
+  }
+
+  // ---- 模型级推荐分（按模型的可信分）：channel_models.recommend_score ----
+  // uptime/延迟/连败/样本数沿用渠道级数据；trustScore 用该模型自己的 channel_models.trust_score。
+  // SELECT 全部行 → JS computeRecommendScore → 一条批量 UPDATE（不逐行往返）。
+  try {
+    const modelRows = await db.execute<ModelScoreRow>(sql`
+      SELECT cm.id AS cm_id, cs.uptime_24h, cs.samples_24h, cs.latency_p50_24h,
+             cs.consecutive_failures, cm.trust_score
+      FROM channel_models cm
+      JOIN channels c ON c.id = cm.channel_id
+      JOIN sites s ON s.id = c.site_id
+      LEFT JOIN channel_stats cs ON cs.channel_id = c.id
+      WHERE s.status = 'approved' AND c.status = 'active' AND cm.model_id IS NOT NULL
+    `);
+    const scored: { cmId: number; score: number | null }[] = [];
+    for (const r of modelRows) {
+      const score = computeRecommendScore({
+        uptime24h: num(r.uptime_24h),
+        latencyP50: r.latency_p50_24h,
+        trustScore: r.trust_score,
+        consecutiveFailures: r.consecutive_failures ?? 0,
+        samples24h: r.samples_24h ?? 0,
+        weights: opts.weights,
+      });
+      scored.push({ cmId: r.cm_id, score });
+    }
+    if (scored.length > 0) {
+      // 批量 UPDATE ... FROM (VALUES)：一条语句写完全部行
+      const values = scored.map(
+        (v) => sql`(${v.cmId}::int, ${v.score}::float8)`,
+      );
+      // 分批（每批 500 行，避免单语句过长）
+      for (let i = 0; i < values.length; i += 500) {
+        const batch = values.slice(i, i + 500);
+        await db.execute(sql`
+          UPDATE channel_models cm SET recommend_score = v.score
+          FROM (VALUES ${sql.join(batch, sql`, `)}) AS v(cm_id, score)
+          WHERE cm.id = v.cm_id
+        `);
+      }
+    }
+  } catch (err: unknown) {
+    // 模型级推荐分失败不中断聚合主流程
+    console.error('[aggregate] model recommend_score failed:', err instanceof Error ? err.message : err);
   }
 
   const durationMs = Date.now() - startedAt;

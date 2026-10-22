@@ -148,6 +148,8 @@ export const DEFAULT_SETTINGS: SettingsMap = {
   'probe.perSiteConcurrency': 2,
   'probe.timeoutMs': 30000,
   'authenticity.intervalHours': 24,
+  'authenticity.modelScope': 'all',
+  'authenticity.secondaryIntervalHours': 48,
   'authenticity.merchantDailyLimit': 3,
   'scoring.weights': DEFAULT_SCORING_WEIGHTS,
   'verify.hourlyLimitPerIp': 10,

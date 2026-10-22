@@ -180,12 +180,19 @@ export interface ChannelListItem {
   modelCount: number;
   models: ChannelModelBrief[];
   stats: ChannelStatsView;
-  trustReport: TrustReportBrief | null; // 主测模型最近一次真伪检测摘要（与 stats.trustScore 同源）
+  /**
+   * 可信分口径：请求带 model 时为 'model'（stats.trustScore / trustVerdict / recommendScore 与 trustReport
+   * 均基于该模型自身的检测）；否则为 'primary'（基于渠道主测模型）。
+   */
+  trustBasis: 'primary' | 'model';
+  trustReport: TrustReportBrief | null; // 按 trustBasis 口径的最近一次真伪检测摘要；所选模型未检测时为 null
+  fallbackTrustReport: TrustReportBrief | null; // 仅当 trustBasis='model' 且所选模型未检测时，给出主测模型的检测作参考
   isFavorite: boolean;           // 未登录恒为 false
 }
 
 export interface ChannelModelView extends ChannelModelBrief {
   id: number;
+  trustReport: TrustReportBrief | null; // 该模型最近一次真伪检测摘要
   lastLatencyMs: number | null;
   lastTestedAt: string | null;
   lastError: string | null;
@@ -685,6 +692,10 @@ export interface SettingsMap {
   'probe.perSiteConcurrency': number;
   'probe.timeoutMs': number;
   'authenticity.intervalHours': number;
+  /** 定时真伪检测范围：仅主测模型 / 主测 + 精选目录模型 / 渠道声明的全部目录模型 */
+  'authenticity.modelScope': 'primary' | 'featured' | 'all';
+  /** 非主测模型的定时检测间隔（小时） */
+  'authenticity.secondaryIntervalHours': number;
   'authenticity.merchantDailyLimit': number;
   'scoring.weights': ScoringWeights;
   'verify.hourlyLimitPerIp': number;

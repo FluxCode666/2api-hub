@@ -16,7 +16,21 @@ let siteId = 0;
 const channelIds: number[] = [];
 
 beforeAll(async () => {
-  // 自建测试资源（hub_test 库，TRUNCATE 由本文件级独占）
+  // 自建最小目录（幂等）：worker 测试不依赖其他测试套件的种子残留
+  await db.execute(sql`
+    INSERT INTO vendors (slug, name, color, sort_order)
+    VALUES ('w-agg-vendor', 'W聚合测试', '#888888', 998)
+    ON CONFLICT (slug) DO NOTHING
+  `);
+  for (const slug of ['gpt-6-sol', 'kimi-k3']) {
+    await db.execute(sql`
+      INSERT INTO models (slug, display_name, vendor_id, aliases, default_protocol)
+      SELECT ${slug}, ${slug}, v.id, ARRAY[${slug}]::text[], 'openai_chat'
+      FROM vendors v WHERE v.slug = 'w-agg-vendor'
+      ON CONFLICT (slug) DO NOTHING
+    `);
+  }
+  // 自建测试资源（hub_test 库）
   const site = await db.execute<{ id: number }>(sql`
     INSERT INTO sites (owner_id, slug, name, homepage_url, status, recharge_ratio, created_at, updated_at)
     SELECT u.id, 'w-agg-site', 'w-agg-site', 'http://example.test/w', 'approved', 1, now(), now()
@@ -44,9 +58,23 @@ beforeAll(async () => {
         200, ${1200 + i * 10}, 500, now() - make_interval(mins => ${10 - i}))
     `);
   }
+  // ch-1：一条失败记录（不足 3 条，不应触发降频）；ch-2：零样本
   await db.execute(sql`
     INSERT INTO probe_runs (channel_id, model, protocol, kind, trigger, success, http_status, created_at)
     VALUES (${channelIds[1]}, 'gpt-6-sol', 'openai_chat', 'availability', 'schedule', false, 503, now())
+  `);
+  // ch-0 的 channel_models：两个已映射模型行，带不同的 trust_score（模型级推荐分用例）
+  await db.execute(sql`
+    INSERT INTO channel_models (channel_id, upstream_name, model_id, trust_score)
+    SELECT ${channelIds[0]}, 'gpt-6-sol', m.id, 95 FROM models m WHERE m.slug = 'gpt-6-sol'
+  `);
+  await db.execute(sql`
+    INSERT INTO channel_models (channel_id, upstream_name, model_id, trust_score)
+    SELECT ${channelIds[0]}, 'kimi-k3', m.id, 30 FROM models m WHERE m.slug = 'kimi-k3'
+  `);
+  // 未映射行（model_id NULL）：不参与模型级推荐分
+  await db.execute(sql`
+    INSERT INTO channel_models (channel_id, upstream_name) VALUES (${channelIds[0]}, 'unknown-model-zz')
   `);
 });
 
@@ -153,6 +181,101 @@ describe('runAggregation（真库集成，含零样本渠道，审查 #4）', ()
       });
       expect(r.recommend_score).toBe(expected);
     }
+  });
+
+  it('模型级推荐分：按各模型自身 trust_score 计算，假模型封顶 40，未映射行不写', async () => {
+    await runAggregation(db, { weights: WEIGHTS, minSamplesForScore: 6 });
+    const rows = await db.execute<{
+      upstream_name: string; trust_score: number | null; recommend_score: number | null;
+      uptime_24h: string | null; samples_24h: number | null; latency_p50_24h: number | null; consecutive_failures: number | null;
+    }>(sql`
+      SELECT cm.upstream_name, cm.trust_score, cm.recommend_score,
+             cs.uptime_24h::text, cs.samples_24h, cs.latency_p50_24h, cs.consecutive_failures
+      FROM channel_models cm
+      LEFT JOIN channel_stats cs ON cs.channel_id = cm.channel_id
+      WHERE cm.channel_id = ${channelIds[0]}
+    `);
+    const byName = new Map(rows.map((r) => [r.upstream_name, r]));
+    // gpt-6-sol（trust 95）：正常分，与 computeRecommendScore 一致
+    const good = byName.get('gpt-6-sol')!;
+    const expectedGood = computeRecommendScore({
+      uptime24h: Number(good.uptime_24h), latencyP50: good.latency_p50_24h,
+      trustScore: good.trust_score, consecutiveFailures: good.consecutive_failures ?? 0,
+      samples24h: good.samples_24h ?? 0, weights: WEIGHTS,
+    });
+    expect(good.recommend_score).toBe(expectedGood);
+    // uptime=0.9（uptime^8≈0.43 非线性）+ trust 95 + 低延迟 → ~71
+    expect(good.recommend_score!).toBeGreaterThan(60);
+    expect(good.recommend_score!).toBeLessThan(90);
+    // kimi-k3（trust 30 < 50 → 判假）：封顶 40
+    const fake = byName.get('kimi-k3')!;
+    const expectedFake = computeRecommendScore({
+      uptime24h: Number(fake.uptime_24h), latencyP50: fake.latency_p50_24h,
+      trustScore: fake.trust_score, consecutiveFailures: fake.consecutive_failures ?? 0,
+      samples24h: fake.samples_24h ?? 0, weights: WEIGHTS,
+    });
+    expect(fake.recommend_score).toBe(expectedFake);
+    expect(fake.recommend_score!).toBeLessThanOrEqual(40); // FAKE_SCORE_CAP
+    // 未映射行（model_id NULL）：不参与
+    expect(byName.get('unknown-model-zz')!.recommend_score).toBeNull();
+  });
+
+  it('自愈同步：channel_models trust ← 最新报告；不一致时同步且推荐分按新可信分计算', async () => {
+    // 人为制造不一致（模拟种子/写入方 bug）：gpt-6-sol 行写旧值 95/genuine，
+    // 再插两份报告（旧 100/genuine、新 63/suspect，id 更大更新）
+    await db.execute(sql`
+      INSERT INTO authenticity_reports (channel_id, model, protocol, score, verdict, checks, duration_ms, trigger, created_at)
+      VALUES (${channelIds[0]}, 'gpt-6-sol', 'openai_chat', 100, 'genuine', '[]'::jsonb, 100, 'schedule',
+          now() - interval '2 hours'),
+         (${channelIds[0]}, 'gpt-6-sol', 'openai_chat', 63, 'suspect', '[]'::jsonb, 100, 'schedule',
+          now() - interval '1 hour')
+    `);
+    await db.execute(sql`
+      UPDATE channel_models SET trust_score = 95, trust_verdict = 'genuine',
+        trust_checked_at = now() - interval '3 hours'
+      WHERE channel_id = ${channelIds[0]} AND upstream_name = 'gpt-6-sol'
+    `);
+
+    await runAggregation(db, { weights: WEIGHTS, minSamplesForScore: 6 });
+
+    // 断言 1：channel_models 已同步为最新报告的 63/suspect
+    const cm = await db.execute<{ trust_score: number | null; trust_verdict: string; trust_checked_at: string }>(sql`
+      SELECT trust_score, trust_verdict, trust_checked_at::text FROM channel_models
+      WHERE channel_id = ${channelIds[0]} AND upstream_name = 'gpt-6-sol'
+    `);
+    expect(cm[0]!.trust_score).toBe(63);
+    expect(cm[0]!.trust_verdict).toBe('suspect');
+    expect(cm[0]!.trust_checked_at).not.toBeNull();
+
+    // 断言 2：推荐分按同步后的可信分 63 计算（非旧值 95）
+    const cmScore = await db.execute<{
+      recommend_score: number | null; trust_score: number | null;
+      uptime_24h: string | null; samples_24h: number | null; latency_p50_24h: number | null; consecutive_failures: number | null;
+    }>(sql`
+      SELECT cm.recommend_score, cm.trust_score,
+             cs.uptime_24h::text, cs.samples_24h, cs.latency_p50_24h, cs.consecutive_failures
+      FROM channel_models cm LEFT JOIN channel_stats cs ON cs.channel_id = cm.channel_id
+      WHERE cm.channel_id = ${channelIds[0]} AND cm.upstream_name = 'gpt-6-sol'
+    `);
+    const r = cmScore[0]!;
+    const expected = computeRecommendScore({
+      uptime24h: Number(r.uptime_24h), latencyP50: r.latency_p50_24h,
+      trustScore: r.trust_score, consecutiveFailures: r.consecutive_failures ?? 0,
+      samples24h: r.samples_24h ?? 0, weights: WEIGHTS,
+    });
+    expect(r.recommend_score).toBe(expected);
+    expect(r.trust_score).toBe(63); // 分数基于同步后的 63，而非旧 95
+    // 63 分 suspect 不触发封顶（≥50），但应低于 trust 95 时的分数
+    expect(r.recommend_score!).toBeLessThan(90);
+
+    // 断言 3：一致的数据不会被重复写（第二遍聚合无变化，用 trust_checked_at 稳定性验证）
+    const checkedAtBefore = cm[0]!.trust_checked_at;
+    await runAggregation(db, { weights: WEIGHTS, minSamplesForScore: 6 });
+    const cm2 = await db.execute<{ trust_checked_at: string }>(sql`
+      SELECT trust_checked_at::text FROM channel_models
+      WHERE channel_id = ${channelIds[0]} AND upstream_name = 'gpt-6-sol'
+    `);
+    expect(cm2[0]!.trust_checked_at).toBe(checkedAtBefore); // 值相同 → 未重复写入
   });
 
   it('备用模型记录不计入渠道可用率（审查 #15：聚合只统计主测模型）', async () => {

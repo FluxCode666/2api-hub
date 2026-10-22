@@ -1,0 +1,262 @@
+[
+  {
+    "path": "/channels?model=claude-opus-5-5&minTrust=80&pageSize=100",
+    "status": 200,
+    "total": 9,
+    "rows": [
+      {
+        "id": 1,
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 81,
+          "model": "claude-opus-5-5",
+          "score": 100
+        }
+      },
+      {
+        "id": 4,
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 19,
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 13,
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 38,
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 10,
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 30,
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 26,
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 21,
+        "basis": "model",
+        "score": null,
+        "report": null
+      }
+    ]
+  },
+  {
+    "path": "/channels?model=claude-haiku-5-5&minTrust=1&pageSize=100",
+    "status": 200,
+    "total": 2,
+    "rows": [
+      {
+        "id": 19,
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 38,
+        "basis": "model",
+        "score": null,
+        "report": null
+      }
+    ]
+  },
+  {
+    "path": "/rankings/overview",
+    "status": 200,
+    "rows": [
+      {
+        "id": 4,
+        "selectedModel": "claude-fable-5-1",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 8,
+          "model": "claude-fable-5-1",
+          "score": 100
+        }
+      },
+      {
+        "id": 35,
+        "selectedModel": "claude-fable-5-1",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 70,
+          "model": "claude-fable-5-1",
+          "score": 100
+        }
+      },
+      {
+        "id": 1,
+        "selectedModel": "claude-fable-5-1",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 3,
+          "model": "claude-fable-5-1",
+          "score": 100
+        }
+      },
+      {
+        "id": 1,
+        "selectedModel": "claude-opus-5-5",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 81,
+          "model": "claude-opus-5-5",
+          "score": 100
+        }
+      },
+      {
+        "id": 4,
+        "selectedModel": "claude-opus-5-5",
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 19,
+        "selectedModel": "claude-opus-5-5",
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 4,
+        "selectedModel": "claude-sonnet-5-5",
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 19,
+        "selectedModel": "claude-sonnet-5-5",
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 13,
+        "selectedModel": "claude-sonnet-5-5",
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 18,
+        "selectedModel": "gpt-6-astra",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 35,
+          "model": "gpt-6-astra",
+          "score": 100
+        }
+      },
+      {
+        "id": 36,
+        "selectedModel": "gpt-6-astra",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 73,
+          "model": "gpt-6-astra",
+          "score": 63
+        }
+      },
+      {
+        "id": 29,
+        "selectedModel": "gpt-6-astra",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 60,
+          "model": "gpt-6-astra",
+          "score": 100
+        }
+      },
+      {
+        "id": 2,
+        "selectedModel": "gpt-6.1-sol",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 84,
+          "model": "gpt-6.1-sol",
+          "score": 100
+        }
+      },
+      {
+        "id": 18,
+        "selectedModel": "gpt-6.1-sol",
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 36,
+        "selectedModel": "gpt-6.1-sol",
+        "basis": "model",
+        "score": null,
+        "report": null
+      },
+      {
+        "id": 17,
+        "selectedModel": "gemini-3.8-flash",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 33,
+          "model": "gemini-3.8-flash",
+          "score": 100
+        }
+      },
+      {
+        "id": 6,
+        "selectedModel": "gemini-3.8-flash",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 10,
+          "model": "gemini-3.8-flash",
+          "score": 100
+        }
+      },
+      {
+        "id": 37,
+        "selectedModel": "gemini-3.8-flash",
+        "basis": "model",
+        "score": 100,
+        "report": {
+          "id": 74,
+          "model": "gemini-3.8-flash",
+          "score": 100
+        }
+      }
+    ]
+  }
+]

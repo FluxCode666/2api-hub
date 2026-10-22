@@ -75,6 +75,8 @@ async function main(): Promise<void> {
   await refreshSettings();
   const settings = settingsRef.settings!;
   let intervalHours = Number(settings['authenticity.intervalHours']) || 24;
+  let modelScope = settings['authenticity.modelScope'] ?? 'all';
+  let secondaryHours = Number(settings['authenticity.secondaryIntervalHours']) || 48;
 
   const scheduler = createScheduler({
     db, limiter: () => limiter, config, metrics, probeTimeoutMs: () => probeTimeoutMs,
@@ -96,6 +98,8 @@ async function main(): Promise<void> {
         await refreshSettings();
         const s = settingsRef.settings!;
         intervalHours = Number(s['authenticity.intervalHours']) || intervalHours;
+        modelScope = s['authenticity.modelScope'] ?? modelScope;
+        secondaryHours = Number(s['authenticity.secondaryIntervalHours']) || secondaryHours;
       } catch (err: unknown) {
         console.error('[settings] refresh failed:', err instanceof Error ? err.message : err);
       }
@@ -202,8 +206,10 @@ async function main(): Promise<void> {
   void (async () => {
     while (state.running) {
       try {
-        const n = await scheduleAuthenticitySweep({ db, intervalHours });
-        if (n > 0) console.log(`[authenticity] enqueued ${n} scheduled task(s)`);
+        const n = await scheduleAuthenticitySweep({ db, intervalHours, modelScope, secondaryIntervalHours: secondaryHours });
+        if (n.created > 0 || n.merged > 0) {
+          console.log(`[authenticity] created ${n.created} task(s), merged ${n.merged} model(s) into pending tasks`);
+        }
       } catch (err: unknown) {
         console.error('[authenticity] sweep failed:', err instanceof Error ? err.message : err);
       }

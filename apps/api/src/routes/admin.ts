@@ -160,11 +160,18 @@ export async function adminRoutes(app: FastifyInstance) {
     const statsRows = channelIds.length
       ? await db.select().from(channelStats).where(inArray(channelStats.channelId, channelIds)) : [];
     const statsMap = new Map(statsRows.map((r) => [r.channelId, r]));
-    const reportRows = await db.select().from(authenticityReports)
-      .where(channelIds.length ? inArray(authenticityReports.channelId, channelIds) : sql`false`)
-      .orderBy(desc(authenticityReports.createdAt)).limit(20);
-    const latestByChannel = new Map<number, typeof authenticityReports.$inferSelect>();
-    for (const r of reportRows) if (!latestByChannel.has(r.channelId)) latestByChannel.set(r.channelId, r);
+    // 每渠道最新主测模型报告（与 stats.trustScore 同源）
+    const reportRows = channelIds.length
+      ? await db.execute<Record<string, unknown>>(sql`
+          SELECT DISTINCT ON (ar.channel_id)
+            ar.id, ar.channel_id, ar.model, ar.protocol, ar.score, ar.verdict, ar.checks, ar.duration_ms, ar.trigger, ar.created_at
+          FROM authenticity_reports ar
+          JOIN channels c2 ON c2.id = ar.channel_id
+          WHERE ar.channel_id IN (${sql.join(channelIds.map((x) => sql`${x}`), sql`, `)})
+            AND ar.model = c2.primary_model
+          ORDER BY ar.channel_id, ar.created_at DESC, ar.id DESC`)
+      : [];
+    const latestByChannel = new Map<number, Record<string, unknown>>(reportRows.map((r) => [r['channel_id'] as number, r]));
     const st = (await db.select().from(siteStats).where(eq(siteStats.siteId, id)).limit(1))[0];
     return {
       ...adminSiteView(row.s, { id: row.o.id, email: row.o.email, nickname: row.o.nickname }, chs.length, st),
@@ -179,10 +186,10 @@ export async function adminRoutes(app: FastifyInstance) {
         probeIntervalSec: c.probeIntervalSec, lastTestOk: c.lastTestOk, lastTestAt: iso(c.lastTestAt),
         models: modelsMap.get(c.id) ?? [],
         stats: statsMap.has(c.id) ? channelStatsView(statsMap.get(c.id)!) : null,
-        latestReport: latestByChannel.has(c.id) ? reportView(latestByChannel.get(c.id)!) : null,
+        latestReport: latestByChannel.has(c.id) ? reportView(rawReportToView(latestByChannel.get(c.id)!)) : null,
         createdAt: c.createdAt.toISOString(), updatedAt: c.updatedAt.toISOString(),
       })),
-      reports: reportRows.map(reportView),
+      reports: reportRows.map((r) => reportView(rawReportToView(r))),
     };
   });
 
@@ -365,14 +372,16 @@ export async function adminRoutes(app: FastifyInstance) {
       ? await db.select().from(channelStats).where(inArray(channelStats.channelId, channelIds)) : [];
     const statsMap = new Map(statsRows.map((r) => [r.channelId, r]));
 
-    // 每渠道最新报告：DISTINCT ON 在数据库中取
+    // 每渠道最新报告：DISTINCT ON 在数据库中取（固定主测模型，与 stats.trustScore 同源）
     const reportRows = channelIds.length
       ? await db.execute<Record<string, unknown>>(sql`
-          SELECT DISTINCT ON (channel_id)
-            id, channel_id, model, protocol, score, verdict, checks, duration_ms, trigger, created_at
-          FROM authenticity_reports
-          WHERE channel_id IN (${sql.join(channelIds.map((x) => sql`${x}`), sql`, `)})
-          ORDER BY channel_id, created_at DESC, id DESC`)
+          SELECT DISTINCT ON (ar.channel_id)
+            ar.id, ar.channel_id, ar.model, ar.protocol, ar.score, ar.verdict, ar.checks, ar.duration_ms, ar.trigger, ar.created_at
+          FROM authenticity_reports ar
+          JOIN channels c2 ON c2.id = ar.channel_id
+          WHERE ar.channel_id IN (${sql.join(channelIds.map((x) => sql`${x}`), sql`, `)})
+            AND ar.model = c2.primary_model
+          ORDER BY ar.channel_id, ar.created_at DESC, ar.id DESC`)
       : [];
     const reportMap = new Map<number, Record<string, unknown>>(reportRows.map((r) => [r['channel_id'] as number, r]));
 
@@ -895,6 +904,8 @@ export async function adminRoutes(app: FastifyInstance) {
       'probe.timeoutMs': z.number().int().min(1000).max(120000).optional(),
       'authenticity.intervalHours': z.number().int().min(1).max(720).optional(),
       'authenticity.merchantDailyLimit': z.number().int().min(1).max(100).optional(),
+      'authenticity.modelScope': z.enum(['primary', 'featured', 'all']).optional(),
+      'authenticity.secondaryIntervalHours': z.number().int().min(1).max(720).optional(),
       'scoring.weights': z.object({
         uptime: z.number().min(0).max(1),
         latency: z.number().min(0).max(1),

@@ -8,7 +8,14 @@
  */
 
 import http from 'node:http';
-import { SCENARIOS, SCENARIO_BEHAVIORS, isScenario, ttftMs, type Protocol, type Scenario } from './scenarios.js';
+import {
+  SCENARIOS,
+  SCENARIO_BEHAVIORS,
+  parseScenarioSegment,
+  resolveScenario,
+  ttftMs,
+  type Protocol,
+} from './scenarios.js';
 import { generateReply } from './replies.js';
 import { computeUsage } from './usage.js';
 import { buildNonStream, thinkingFor, writeStream, type ReplyContext, type ToolCallSpec } from './protocols.js';
@@ -203,13 +210,13 @@ function sendError(res: http.ServerResponse, status: number, message: string): v
   sendJson(res, status, { error: { message } });
 }
 
-/** 从 URL 解析出 { scenario, rest }，不匹配返回 null */
-function parseScenarioPath(urlPath: string): { scenario: Scenario; rest: string } | null {
+/** 从 URL 解析出 { segment, rest }，segment 为解码后的 scenario 段（支持按模型覆盖语法），不匹配返回 null */
+function parseScenarioPath(urlPath: string): { segment: NonNullable<ReturnType<typeof parseScenarioSegment>>; rest: string } | null {
   const m = /^\/([^/]+)(\/.*)?$/.exec(urlPath);
   if (!m || !m[1]) return null;
-  const scenario = m[1];
-  if (!isScenario(scenario)) return null;
-  return { scenario, rest: m[2] ?? '/' };
+  const segment = parseScenarioSegment(m[1]);
+  if (!segment) return null;
+  return { segment, rest: m[2] ?? '/' };
 }
 
 interface ParsedGeminiAction {
@@ -278,10 +285,9 @@ const server = http.createServer(async (req, res) => {
       log(404);
       return;
     }
-    const { scenario, rest } = parsed;
-    const behavior = SCENARIO_BEHAVIORS[scenario];
+    const { segment, rest } = parsed;
 
-    // GET 模型列表
+    // GET 模型列表（不受模型覆盖影响，始终返回全部模型）
     if (method === 'GET' && (rest === '/v1/models' || rest === '/v1beta/models')) {
       if (rest === '/v1/models') {
         sendJson(res, 200, { object: 'list', data: MODELS.map((id) => ({ id, object: 'model', owned_by: 'mock-upstream' })) });
@@ -296,19 +302,6 @@ const server = http.createServer(async (req, res) => {
     if (method !== 'POST') {
       sendError(res, 404, 'Not found');
       log(404);
-      return;
-    }
-
-    // scenario 固定错误（dead）
-    if (behavior.alwaysError !== null) {
-      sendError(res, behavior.alwaysError, 'Service unavailable');
-      log(behavior.alwaysError);
-      return;
-    }
-    // scenario 概率错误（flaky 502 / ratelimited 429）
-    if (behavior.errorRate !== null && Math.random() < behavior.errorRate.probability) {
-      sendError(res, behavior.errorRate.status, behavior.errorRate.status === 429 ? 'Rate limit exceeded' : 'Bad gateway');
-      log(behavior.errorRate.status);
       return;
     }
 
@@ -351,6 +344,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     const model = geminiAction ? geminiAction.model : extracted.model;
+    // 按模型覆盖解析实际生效的 scenario（CONTRACT-CHANGES：genuine,opus=fake 语法）
+    const scenario = resolveScenario(segment, model);
+    const behavior = SCENARIO_BEHAVIORS[scenario];
+    // 覆盖场景的错误注入也按生效场景执行（如 opus=dead 时 opus 请求恒 503）
+    if (behavior.alwaysError !== null) {
+      sendError(res, behavior.alwaysError, 'Service unavailable');
+      log(behavior.alwaysError);
+      return;
+    }
+    if (behavior.errorRate !== null && Math.random() < behavior.errorRate.probability) {
+      sendError(res, behavior.errorRate.status, behavior.errorRate.status === 429 ? 'Rate limit exceeded' : 'Bad gateway');
+      log(behavior.errorRate.status);
+      return;
+    }
     let stream = extracted.stream;
     if (geminiAction) {
       stream = geminiAction.stream || extracted.stream;
@@ -370,10 +377,11 @@ const server = http.createServer(async (req, res) => {
     // thinking 文本计入 inputText 的回复文本：usage 输出计 thinking + text
     const outputText = (thinking ? thinking.text + '\n' : '') + (toolCall ? '' : decision.text);
 
-    const usage =
-      behavior.usageMode === 'fake'
-        ? null
-        : computeUsage(behavior.usageMode === 'vendor' ? 'vendor' : 'openai_flat', model, protocol, extracted.inputText, outputText);
+    let usage: ReturnType<typeof computeUsage> | null = null;
+    if (behavior.usageMode !== 'fake') {
+      const mode = behavior.usageMode === 'vendor' ? 'vendor' : 'openai_flat';
+      usage = computeUsage(mode, model, protocol, extracted.inputText, outputText);
+    }
 
     const ctx: ReplyContext = {
       scenario,

@@ -53,3 +53,11 @@
 ## 2026-10-22 列表项附带可信分检测摘要 —— 编排者
 
 > 新增 `TrustCheckBrief`、`TrustReportBrief`，`ChannelListItem` 新增 `trustReport: TrustReportBrief | null`（`ChannelDetail` 随之继承）。取值规则与 worker 计算 `channel_stats.trust_score` 一致：该渠道 `model = primary_model` 的最近一次 `authenticity_reports`。用于可信分徽章悬浮展示检测项。由 Kimi（API）与 Codex（前端）实施。
+
+## 2026-10-22 按模型的可信分 —— 编排者（用户决策：按筛选的模型展示）
+
+> - `ChannelListItem` 新增 `trustBasis: 'primary' | 'model'`、`fallbackTrustReport`；带 `model` 查询时 stats 的 trustScore/trustVerdict/recommendScore 与 trustReport 基于所选模型。
+> - `ChannelModelView` 新增 `trustReport`（渠道详情的模型列表悬浮卡片用）。
+> - `SettingsMap` 新增 `authenticity.modelScope`（默认 all）、`authenticity.secondaryIntervalHours`（默认 48）。
+> - schema：`channel_models.recommend_score`（可空，worker 写入）。迁移由编排者生成。
+> - 分工：GLM-B worker（检测范围扩展 + 模型级推荐分）、Kimi API（按模型口径查询/排序 + 种子增加混合场景渠道）、GLM-A mock（按模型覆盖场景）、Codex web（悬浮卡片口径标识 + 详情页模型列表 + 管理设置项）。

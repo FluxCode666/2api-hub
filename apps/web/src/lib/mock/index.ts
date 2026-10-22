@@ -1,11 +1,12 @@
 import {
   DEFAULT_SORT_ORDER,
+  computeRecommendScore,
   type ChannelDetail, type ChannelHistory, type ChannelListItem, type ChannelSort, type FeedbackItem,
   type HistoryWindow, type MyReview, type Paginated, type ProbeRun, type SessionUser, type SiteDetail,
   type VerifyRequest,
 } from '@hub/shared';
 import { getMockAdminAnnouncements, getMockAdminVendors, mockAdmin } from './admin';
-import { getMockMerchantSites, mockMerchant } from './merchant';
+import { getMockMerchantReports, getMockMerchantSites, mockMerchant } from './merchant';
 import { MockError } from './error';
 import { mockNow, mockReport, mockUsers } from './fixtures';
 import { mockCommunityStore, type StoredReview } from './store';
@@ -80,13 +81,25 @@ function channelList(query: URLSearchParams, user: SessionUser | null): ChannelL
     if (query.has('siteId') && channel.site.id !== Number(query.get('siteId'))) return false;
     if (query.has('maxRatio') && channel.actualRatio > Number(query.get('maxRatio'))) return false;
     if (query.has('minUptime') && (channel.stats.uptime24h === null || channel.stats.uptime24h < Number(query.get('minUptime')))) return false;
-    if (query.has('minTrust') && (channel.stats.trustScore === null || channel.stats.trustScore < Number(query.get('minTrust')))) return false;
     if (query.get('stableOnly') === 'true' && ((channel.stats.uptime24h ?? 0) < 0.95 || channel.stats.samples24h < 12)) return false;
     if (query.get('protocol') && channel.protocol !== query.get('protocol')) return false;
     return true;
   }).map((channel) => {
     const selected = model ? channel.models.find((item) => item.modelSlug === model) : null;
-    return withFavorite({ ...channel, price: selected && model ? { modelSlug: model, upstreamName: selected.upstreamName, inputCny: selected.inputPriceCny, outputCny: selected.outputPriceCny, isOverride: false } : channel.price }, user);
+    if (selected && model) {
+      const stats = { ...channel.stats,
+        trustScore: selected.trustReport?.score ?? null,
+        trustVerdict: selected.trustReport?.verdict ?? 'unknown',
+        recommendScore: computeRecommendScore({ ...channel.stats, trustScore: selected.trustReport?.score ?? null }),
+      };
+      return withFavorite({ ...channel, stats, trustBasis: 'model', trustReport: selected.trustReport,
+        fallbackTrustReport: selected.trustReport ? null : channel.trustReport,
+        price: { modelSlug: model, upstreamName: selected.upstreamName, inputCny: selected.inputPriceCny, outputCny: selected.outputPriceCny, isOverride: false } }, user);
+    }
+    return withFavorite({ ...channel, trustBasis: 'primary', fallbackTrustReport: null }, user);
+  }).filter((channel) => {
+    if (query.has('minTrust')) return channel.stats.trustScore !== null && channel.stats.trustScore >= Number(query.get('minTrust'));
+    return true;
   });
   const value = (item: ChannelListItem): number | null => {
     switch (sort) {
@@ -172,7 +185,7 @@ export async function mockRequest(path: string, method: string, body: unknown, u
       if (kind !== null && !['availability', 'authenticity', 'discovery'].includes(kind)) throw new MockError(400, 'invalid_kind', '不支持的探测类型。');
       return paginate(mockRuns(channel).filter(run => (!kind || run.kind === kind) && (!success || run.success === (success === 'true'))).slice(0, 10000), query);
     }
-    if (channelPath[2] === 'reports') return channel.latestReport ? [channel.latestReport] : [];
+    if (channelPath[2] === 'reports') return getMockMerchantReports().filter(report => report.channelId === channel.id).slice(0, 20);
     return withFavorite(channel, user);
   }
   if (verb === 'GET' && pathname === '/sites') {

@@ -1,0 +1,11 @@
+{
+  "passed": 6,
+  "checks": [
+    "mixed-score",
+    "primary-score",
+    "fallback",
+    "model-minTrust",
+    "detail-model-report",
+    "full-report-model"
+  ]
+}

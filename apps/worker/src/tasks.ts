@@ -290,10 +290,16 @@ async function runAuthenticity(
     const modelId = matchCatalogModel(model, catalog.map((c) => ({ id: c.id, slug: c.slug, aliases: c.aliases })));
     const hint = modelId !== null ? catalog.find((c) => c.id === modelId)?.hint ?? null : null;
     const result = await probeAuthenticity({ ...target, model }, hint, { timeoutMs: deps.timeoutMs });
-    // 报告写入带 lease 校验（审查 #3）
+    // 该模型的 channel_models 行 id（报告 channel_model_id 关联用；行可能不存在 → null）
+    const cmRows = await deps.db.execute<{ cm_id: number | null }>(sql`
+      SELECT id AS cm_id FROM channel_models
+      WHERE channel_id = ${task.channelId} AND upstream_name = ${model} LIMIT 1
+    `);
+    const cmId = cmRows[0]?.cm_id ?? null;
+    // 报告写入带 lease 校验（审查 #3）+ channel_model_id 关联
     await deps.db.execute(sql`
-      INSERT INTO authenticity_reports (channel_id, task_id, model, protocol, score, verdict, checks, duration_ms, trigger, created_at)
-      SELECT ${task.channelId}, ${task.id}, ${model}, ${task.protocol}, ${result.score}, ${result.verdict},
+      INSERT INTO authenticity_reports (channel_id, channel_model_id, task_id, model, protocol, score, verdict, checks, duration_ms, trigger, created_at)
+      SELECT ${task.channelId}, ${cmId}, ${task.id}, ${model}, ${task.protocol}, ${result.score}, ${result.verdict},
         ${JSON.stringify(result.checks)}::jsonb, ${result.durationMs}, ${task.trigger}, now()
       WHERE EXISTS (
         SELECT 1 FROM probe_tasks WHERE id = ${task.id} AND lease_token = ${task.leaseToken} AND status = 'running'

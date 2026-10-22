@@ -66,6 +66,18 @@ async function enqueue(channelId: number, kind: 'availability' | 'authenticity' 
 }
 
 beforeAll(async () => {
+  // 自建最小目录（幂等）：worker 测试不依赖其他测试套件的种子残留
+  await db.execute(sql`
+    INSERT INTO vendors (slug, name, color, sort_order)
+    VALUES ('w-tasks-vendor', 'W任务测试', '#888888', 997)
+    ON CONFLICT (slug) DO NOTHING
+  `);
+  await db.execute(sql`
+    INSERT INTO models (slug, display_name, vendor_id, aliases, default_protocol)
+    SELECT 'gpt-6-sol', 'GPT-6 Sol', v.id, ARRAY['gpt-6-sol']::text[], 'openai_chat'
+    FROM vendors v WHERE v.slug = 'w-tasks-vendor'
+    ON CONFLICT (slug) DO NOTHING
+  `);
   const site = await db.execute<{ id: number; owner_id: string }>(sql`
     INSERT INTO sites (owner_id, slug, name, homepage_url, status, recharge_ratio, created_at, updated_at)
     SELECT u.id, 'w-tasks-site', 'w-tasks-site', 'http://example.test/w', 'approved', 1, now(), now()
@@ -172,17 +184,27 @@ describe('三种任务执行', () => {
     expect(notes.length).toBe(1);
   });
 
-  it('authenticity 任务：写 authenticity_reports + 回写 channel_models trust', async () => {
+  it('authenticity 任务：写 authenticity_reports（含 channel_model_id）+ 回写 channel_models trust', async () => {
     await enqueue(nextChannelId, 'authenticity');
+    // 先建一个已映射的 channel_models 行，报告应关联它的 id
+    await db.execute(sql`
+      INSERT INTO channel_models (channel_id, upstream_name, model_id)
+      SELECT ${nextChannelId}, 'gpt-6-sol', m.id FROM models m WHERE m.slug = 'gpt-6-sol'
+    `);
+    const cmRow = await db.execute<{ id: number }>(sql`
+      SELECT id FROM channel_models WHERE channel_id = ${nextChannelId} AND upstream_name = 'gpt-6-sol'
+    `);
+    const cmId = cmRow[0]!.id;
     const t = await claimNextTask(db, WORKER_ID, 3);
     expect(t!.kind).toBe('authenticity');
     await runTaskToCompletion(deps, t!);
-    const reports = await db.execute<{ score: number; verdict: string; task_id: string }>(sql`
-      SELECT score, verdict, task_id::text FROM authenticity_reports WHERE channel_id = ${nextChannelId}
+    const reports = await db.execute<{ score: number; verdict: string; task_id: string; channel_model_id: number | null }>(sql`
+      SELECT score, verdict, task_id::text, channel_model_id FROM authenticity_reports WHERE channel_id = ${nextChannelId}
     `);
     expect(reports.length).toBe(1);
     expect(reports[0]!.score).toBe(88);
     expect(Number(reports[0]!.task_id)).toBe(Number(t!.id));
+    expect(reports[0]!.channel_model_id).toBe(cmId); // 报告正确关联模型行
     const cm = await db.execute<{ trust_score: number; trust_verdict: string }>(sql`
       SELECT trust_score, trust_verdict FROM channel_models
       WHERE channel_id = ${nextChannelId} AND upstream_name = 'gpt-6-sol'

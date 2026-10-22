@@ -1,0 +1,159 @@
+{
+  "checkedAt": "2026-10-22T10:54:49.859Z",
+  "results": [
+    {
+      "sort": "trust",
+      "rows": [
+        {
+          "id": 1,
+          "score": 100,
+          "recommend": 95,
+          "reportScore": 100
+        },
+        {
+          "id": 35,
+          "score": 41,
+          "recommend": 40,
+          "reportScore": 41
+        },
+        {
+          "id": 4,
+          "score": null,
+          "recommend": 87.5,
+          "reportScore": null
+        },
+        {
+          "id": 10,
+          "score": null,
+          "recommend": 82.8,
+          "reportScore": null
+        },
+        {
+          "id": 13,
+          "score": null,
+          "recommend": 89.8,
+          "reportScore": null
+        },
+        {
+          "id": 15,
+          "score": null,
+          "recommend": 80,
+          "reportScore": null
+        },
+        {
+          "id": 19,
+          "score": null,
+          "recommend": 87.4,
+          "reportScore": null
+        },
+        {
+          "id": 21,
+          "score": null,
+          "recommend": 45.9,
+          "reportScore": null
+        },
+        {
+          "id": 23,
+          "score": null,
+          "recommend": 75.1,
+          "reportScore": null
+        },
+        {
+          "id": 26,
+          "score": null,
+          "recommend": 69.3,
+          "reportScore": null
+        },
+        {
+          "id": 30,
+          "score": null,
+          "recommend": 90,
+          "reportScore": null
+        },
+        {
+          "id": 38,
+          "score": null,
+          "recommend": 87.4,
+          "reportScore": null
+        }
+      ]
+    },
+    {
+      "sort": "recommend",
+      "rows": [
+        {
+          "id": 1,
+          "score": 100,
+          "recommend": 95,
+          "reportScore": 100
+        },
+        {
+          "id": 30,
+          "score": null,
+          "recommend": 90,
+          "reportScore": null
+        },
+        {
+          "id": 13,
+          "score": null,
+          "recommend": 89.8,
+          "reportScore": null
+        },
+        {
+          "id": 4,
+          "score": null,
+          "recommend": 87.5,
+          "reportScore": null
+        },
+        {
+          "id": 19,
+          "score": null,
+          "recommend": 87.4,
+          "reportScore": null
+        },
+        {
+          "id": 38,
+          "score": null,
+          "recommend": 87.4,
+          "reportScore": null
+        },
+        {
+          "id": 10,
+          "score": null,
+          "recommend": 82.8,
+          "reportScore": null
+        },
+        {
+          "id": 15,
+          "score": null,
+          "recommend": 80,
+          "reportScore": null
+        },
+        {
+          "id": 23,
+          "score": null,
+          "recommend": 75.1,
+          "reportScore": null
+        },
+        {
+          "id": 26,
+          "score": null,
+          "recommend": 69.3,
+          "reportScore": null
+        },
+        {
+          "id": 21,
+          "score": null,
+          "recommend": 45.9,
+          "reportScore": null
+        },
+        {
+          "id": 35,
+          "score": 41,
+          "recommend": 40,
+          "reportScore": 41
+        }
+      ]
+    }
+  ]
+}

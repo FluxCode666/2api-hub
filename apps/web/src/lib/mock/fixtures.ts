@@ -80,6 +80,7 @@ function statsFor(index: number): ChannelStatsView {
   };
 }
 
+export const mockModelReports: AuthenticityReport[] = [];
 export const mockChannels: ChannelDetail[] = Array.from({ length: 36 }, (_, index) => {
   const site = mockSites[Math.floor(index / 3)]!;
   const vendor = mockVendors[index % mockVendors.length]!;
@@ -102,6 +103,31 @@ export const mockChannels: ChannelDetail[] = Array.from({ length: 36 }, (_, inde
     stats.trustScore = report.score;
     stats.recommendScore = computeRecommendScore(stats);
   }
+  // 每个已声明模型都有独立的检测摘要。演示数据刻意包含一条“主测真、Opus 假”和一条
+  // “主测已检测、Opus 未检测”的混合渠道，方便验证按模型筛选及 fallback 展示。
+  const modelReports = new Map<string, AuthenticityReport | null>();
+  for (const [modelIndex, model] of models.entries()) {
+    let modelReport: AuthenticityReport | null = null;
+    if (model.slug === primary.slug) {
+      modelReport = report;
+    } else if (index === 0 && model.slug === 'claude-opus-5-5') {
+      modelReport = report ? {
+        ...report,
+        id: index * 100 + modelIndex + 1001,
+        model: model.slug,
+        score: 20,
+        verdict: 'fake',
+        checks: AUTH_CHECKS.map((check, checkIndex) => ({ ...check, passed: checkIndex < 2,
+          detail: '演示数据：该模型的多项身份特征未通过。' })),
+      } : null;
+    } else if (index === 8 && model.slug === 'claude-opus-5-5') {
+      modelReport = null;
+    } else if (report) {
+      modelReport = { ...report, id: index * 100 + modelIndex + 1001, model: model.slug };
+    }
+    modelReports.set(model.slug, modelReport);
+    if (modelReport) mockModelReports.push(modelReport);
+  }
   return {
     id: index + 1, rank: index + 1, name: `${vendor.name} ${index % 3 === 0 ? '优选直连' : index % 3 === 1 ? '标准分组' : '高性价比'}`,
     description: `${vendor.name} 模型分组，按 Token 计费。此渠道为演示数据。`,
@@ -110,14 +136,18 @@ export const mockChannels: ChannelDetail[] = Array.from({ length: 36 }, (_, inde
     vendor, groupRatio: Math.round(ratio * site.rechargeRatio * 10000) / 10000,
     rechargeRatio: site.rechargeRatio, actualRatio: ratio,
     price: { modelSlug: primary.slug, upstreamName: primary.slug, inputCny: priceCny(primary.officialInputPrice, ratio), outputCny: priceCny(primary.officialOutputPrice, ratio), isOverride: false },
-    modelCount: models.length, models: models.map((model, modelIndex) => ({
+    modelCount: models.length, models: models.map((model, modelIndex) => {
+      const modelReport = modelReports.get(model.slug) ?? null;
+      return {
       id: index * 100 + modelIndex + 1, upstreamName: model.slug, modelSlug: model.slug, displayName: model.displayName,
       vendorSlug: vendor.slug, lastStatus: stats.samples24h === 0 ? 'untested' : stats.uptime24h === 0 ? 'fail' : 'pass',
-      trustScore: stats.trustScore, trustVerdict: stats.trustVerdict,
+      trustScore: modelReport?.score ?? null, trustVerdict: modelReport?.verdict ?? 'unknown', trustReport: toTrustReportBrief(modelReport),
       lastLatencyMs: stats.latencyP50, lastTestedAt: stats.lastProbeAt, lastError: stats.uptime24h === 0 ? '上游返回 503' : null,
       inputPriceCny: priceCny(model.officialInputPrice, ratio), outputPriceCny: priceCny(model.officialOutputPrice, ratio),
-    })), stats, isFavorite: false, primaryModel: primary.slug, backupModel: models.find((model) => model.slug !== primary.slug)?.slug ?? null,
-    trustReport: toTrustReportBrief(report), latestReport: report, createdAt: site.createdAt,
+      };
+    }), stats, trustBasis: 'primary', trustReport: toTrustReportBrief(report), fallbackTrustReport: null, isFavorite: false,
+    primaryModel: primary.slug, backupModel: models.find((model) => model.slug !== primary.slug)?.slug ?? null,
+    latestReport: report, createdAt: site.createdAt,
   };
 });
 

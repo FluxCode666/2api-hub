@@ -58,6 +58,10 @@ interface ListRow extends Record<string, unknown> {
   trust_verdict: TrustVerdict | null;
   recommend_score: number | null;
   sparkline: unknown;
+  // 按模型口径：channel_models 行的 trust/recommend（带 model 查询时有值）
+  model_trust_score: number | null;
+  model_trust_verdict: string | null;
+  model_recommend_score: number | null;
 }
 
 const ACTUAL_RATIO = sql`CASE WHEN s.recharge_ratio > 0 THEN c.group_ratio / s.recharge_ratio ELSE c.group_ratio END`;
@@ -74,6 +78,13 @@ const SORT_COL: Record<ChannelSort, SQL> = {
   latency: sql`cs.latency_p50_24h`,
   trust: sql`cs.trust_score`,
   updated: sql`c.updated_at`,
+};
+
+/** 按模型口径的排序列（带 model 查询时替换 trust/recommend） */
+/** 按模型口径的排序列（带 model 查询时替换 trust/recommend）。严格用模型级值，null 排最后（不回退渠道级）。 */
+const SORT_COL_MODEL: Partial<Record<ChannelSort, SQL>> = {
+  trust: sql`pm.model_trust_score`,
+  recommend: sql`COALESCE(pm.model_recommend_score, cs.recommend_score)`, // recommendScore 为 null 时回退渠道级（编排者规则）
 };
 
 export interface ChannelQueryResult {
@@ -102,9 +113,13 @@ export async function queryChannels(
   }
   const priceJoin = modelId !== null
     // 按模型查榜单：lateral 每渠道只取一行（主测模型优先，其次有覆盖价的，最后价格最低的），
-    // 避免同一渠道多个 upstream_name 映射同一 model_id 导致重复上榜
+    // 避免同一渠道多个 upstream_name 映射同一 model_id 导致重复上榜；
+    // 额外取该行的 trust/recommend 字段（按模型口径）
     ? sql`LEFT JOIN LATERAL (
-        SELECT pm0.id, pm0.upstream_name, pm0.price_override_input, pm0.price_override_output, pm0.model_id
+        SELECT pm0.id, pm0.upstream_name, pm0.price_override_input, pm0.price_override_output, pm0.model_id,
+               pm0.trust_score AS model_trust_score, pm0.trust_verdict AS model_trust_verdict,
+               pm0.recommend_score AS model_recommend_score,
+               1::int AS model_row_found
         FROM channel_models pm0
         WHERE pm0.channel_id = c.id AND pm0.model_id = ${modelId}
         ORDER BY
@@ -116,7 +131,9 @@ export async function queryChannels(
       ) pm ON true
       LEFT JOIN models m ON m.id = pm.model_id`
     : sql`LEFT JOIN LATERAL (
-        SELECT pm0.id, pm0.upstream_name, pm0.price_override_input, pm0.price_override_output, pm0.model_id
+        SELECT pm0.id, pm0.upstream_name, pm0.price_override_input, pm0.price_override_output, pm0.model_id,
+               NULL::int AS model_trust_score, NULL::text AS model_trust_verdict, NULL::float8 AS model_recommend_score,
+               0::int AS model_row_found
         FROM channel_models pm0
         WHERE pm0.channel_id = c.id AND pm0.upstream_name = c.primary_model
         LIMIT 1
@@ -144,7 +161,12 @@ export async function queryChannels(
   if (params.siteId !== undefined) conditions.push(sql`c.site_id = ${params.siteId}`);
   if (params.maxRatio !== undefined) conditions.push(sql`(${ACTUAL_RATIO}) <= ${params.maxRatio}`);
   if (params.minUptime !== undefined) conditions.push(sql`cs.uptime_24h >= ${params.minUptime}`);
-  if (params.minTrust !== undefined) conditions.push(sql`cs.trust_score >= ${params.minTrust}`);
+  // 按模型口径时 minTrust 严格用该模型的 trust_score（null=未检测，不满足任何 minTrust）
+  if (params.minTrust !== undefined) {
+    conditions.push(modelId !== null
+      ? sql`pm.model_trust_score >= ${params.minTrust} AND pm.model_trust_score IS NOT NULL`
+      : sql`cs.trust_score >= ${params.minTrust}`);
+  }
   if (params.stableOnly) conditions.push(sql`cs.uptime_24h >= ${STABLE_MIN_UPTIME} AND cs.samples_24h >= ${STABLE_MIN_SAMPLES}`);
   if (params.protocol) conditions.push(sql`c.protocol = ${params.protocol}`);
   if (params.ids && params.ids.length > 0) {
@@ -154,7 +176,8 @@ export async function queryChannels(
   const where = sql.join(conditions, sql` AND `);
   const sort = params.sort ?? 'recommend';
   const order = params.order ?? DEFAULT_SORT_ORDER[sort];
-  const sortCol = SORT_COL[sort];
+  // 按模型口径时 trust/recommend 排序用模型级值
+  const sortCol = modelId !== null ? (SORT_COL_MODEL[sort] ?? SORT_COL[sort]) : SORT_COL[sort];
   const orderSql = order === 'asc'
     ? sql`ORDER BY ${sortCol} ASC NULLS LAST, c.id ASC`
     : sql`ORDER BY ${sortCol} DESC NULLS LAST, c.id ASC`;
@@ -185,14 +208,26 @@ export async function queryChannels(
       cs.uptime_1h, cs.uptime_24h, cs.uptime_7d, cs.samples_24h,
       cs.latency_p50_24h, cs.latency_p95_24h, cs.ttft_avg_24h, cs.consecutive_failures,
       cs.last_success_at, cs.last_failure_at, cs.last_probe_at,
-      cs.trust_score, cs.trust_verdict, cs.recommend_score, cs.sparkline
+      cs.trust_score, cs.trust_verdict, cs.recommend_score, cs.sparkline,
+      pm.model_trust_score, pm.model_trust_verdict, pm.model_recommend_score
     ${from}
     ${orderSql}
     LIMIT ${params.pageSize} OFFSET ${(params.page - 1) * params.pageSize}`);
 
   const channelIds = rows.map((r) => r.id);
   const modelsBrief = await loadModelsBrief(db, channelIds);
-  const trustReports = await loadTrustReportBriefs(db, channelIds);
+  // 按模型口径时，trustReport 取所选模型的报告；fallbackTrustReport 取主测模型
+  // modelMap: channelId → 该行 channel_models 的 upstream_name（lateral 查询选出的那一行）
+  const modelMap = new Map<number, string>();
+  if (modelId !== null) {
+    for (const r of rows) {
+      if (r.price_upstream_name) modelMap.set(r.id, r.price_upstream_name);
+    }
+  }
+  const trustReports = modelId !== null
+    ? await loadTrustReportBriefs(db, channelIds, false, modelMap)
+    : await loadTrustReportBriefs(db, channelIds, true);
+  const fallbackTrustReports = modelId !== null ? await loadTrustReportBriefs(db, channelIds, true) : new Map<number, TrustReportBrief>();
   const favSet = currentUserId && channelIds.length > 0
     ? new Set(
         (await db.select({ channelId: favorites.channelId }).from(favorites)
@@ -238,8 +273,14 @@ export async function queryChannels(
       price,
       modelCount: r.model_count,
       models: modelsBrief.get(r.id) ?? [],
+      trustBasis: (modelId !== null ? 'model' : 'primary') as 'primary' | 'model',
       trustReport: trustReports.get(r.id) ?? null,
-      stats: channelStatsView(statsRowFrom(r)),
+      fallbackTrustReport: modelId !== null && !(trustReports.get(r.id)) ? (fallbackTrustReports.get(r.id) ?? null) : null,
+      stats: channelStatsView(statsRowFrom(r), modelId !== null ? {
+        trustScore: r.model_trust_score,
+        trustVerdict: r.model_trust_verdict,
+        recommendScore: r.model_recommend_score,
+      } : undefined),
       isFavorite: favSet.has(r.id),
     };
   });
@@ -276,10 +317,53 @@ function statsRowFrom(r: ListRow): ChannelStatsRow | null {
   };
 }
 
-/** 批量获取主测模型最近一次真伪检测摘要（与 worker 计算 channel_stats.trust_score 同源：DISTINCT ON + model=primary_model） */
-async function loadTrustReportBriefs(db: Database, channelIds: number[]): Promise<Map<number, TrustReportBrief>> {
+/** 批量获取最近一次真伪检测摘要
+ *  forPrimary=true（默认）：取主测模型（model = c2.primary_model），与 worker 计算 channel_stats.trust_score 同源
+ *  forPrimary=false + modelMap：取每个渠道所选模型的报告（model = modelMap[channelId]），用于按模型口径榜单 */
+async function loadTrustReportBriefs(
+  db: Database,
+  channelIds: number[],
+  forPrimary = true,
+  modelMap?: Map<number, string>,
+): Promise<Map<number, TrustReportBrief>> {
   const map = new Map<number, TrustReportBrief>();
   if (channelIds.length === 0) return map;
+
+  // forPrimary=false 且有 modelMap 时，按每个渠道的具体模型名查询
+  if (!forPrimary && modelMap && modelMap.size > 0) {
+    // 构造 VALUES 列表：(channel_id, upstream_name) 对
+    const pairs = [...modelMap.entries()].filter(([cid]) => channelIds.includes(cid));
+    if (pairs.length === 0) return map;
+    const valuesSql = sql.join(
+      pairs.map(([cid, model]) => sql`(${cid}::int, ${model}::text)`),
+      sql`, `,
+    );
+    const rows = await db.execute<Record<string, unknown>>(sql`
+      SELECT DISTINCT ON (ar.channel_id)
+        ar.channel_id, ar.id::int AS report_id, ar.model, ar.score, ar.verdict, ar.checks, ar.created_at
+      FROM authenticity_reports ar
+      JOIN (VALUES ${valuesSql}) AS t(channel_id, upstream_name)
+        ON t.channel_id = ar.channel_id AND t.upstream_name = ar.model
+      ORDER BY ar.channel_id, ar.created_at DESC, ar.id DESC`);
+    for (const r of rows) {
+      const checks = (r['checks'] as { id: string; passed: boolean | null; score?: number }[]).map((c) => ({
+        id: c.id as TrustCheckBrief['id'],
+        passed: c.passed,
+        ...(c.score !== undefined ? { score: c.score } : {}),
+      }));
+      map.set(r['channel_id'] as number, {
+        id: r['report_id'] as number,
+        model: r['model'] as string,
+        score: r['score'] as number | null,
+        verdict: r['verdict'] as TrustReportBrief['verdict'],
+        checkedAt: new Date(r['created_at'] as string).toISOString(),
+        checks,
+      });
+    }
+    return map;
+  }
+
+  // 默认：主测模型（model = c2.primary_model）
   const rows = await db.execute<Record<string, unknown>>(sql`
     SELECT DISTINCT ON (ar.channel_id)
       ar.channel_id, ar.id::int AS report_id, ar.model, ar.score, ar.verdict, ar.checks, ar.created_at
