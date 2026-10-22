@@ -37,3 +37,15 @@
 - 语义：任务完成、失败以及写报告、发通知等副作用写入均带 `WHERE id=$1 AND lease_token=$2` 校验，校验失败放弃写入；回收只处理 `heartbeat_at` 超过恢复阈值的任务；退出时只归还 `locked_by=本实例` 的任务。attempts 上限检查放进原子领取语句。
 - 兼容性：向后兼容（只新增可空列，不改已有字段）；hub 与 hub_test 均已执行迁移。
 - 顺带修复：drizzle/meta/0001_snapshot.json 之前是 0000 的直接拷贝（id 相同、prevId 未维护），导致 drizzle-kit generate 报 snapshot collision；已补全 prevId 链（0001.prevId → 0000.id，0001.id 换新 uuid），0002 迁移由 drizzle-kit 正常生成。
+
+## 2026-10-22 通知与收藏改为服务端分页 —— 编排者
+
+> 配合前端「所有列表改为分页」。`GET /me/favorites` 由 `ChannelListItem[]` 改为 `Paginated<ChannelListItem>`；`GET /me/notifications` 由数组改为 `NotificationList`（`Paginated<Notification> & { unreadCount }`，支持 `unread=true`）。均支持 `page`/`pageSize`。这是破坏性变更，由 Kimi（后端）与 Codex（前端）同步实施。
+
+## 2026-10-22 新增公开探测记录分页接口 —— 编排者
+
+> 前端请求为 `history` 增加分页字段；编排者改为新增独立接口 `GET /channels/:id/runs` → `Paginated<ProbeRun>`（公开、可见性规则与 `/channels/:id/history` 相同；errorMessage 与公开 history 一样只给中文分类）。`history.recentRuns` 保持不变（兼容）。由 Kimi 实现。
+
+## 2026-10-22 新增管理端渠道分页接口 —— 编排者
+
+> 新增 `AdminChannel extends MerchantChannel { site }` 与 `GET /admin/channels` → `Paginated<AdminChannel>`，替代前端「汇总全部站点详情后客户端分页」的做法。由 Kimi 实现，Codex 接入。

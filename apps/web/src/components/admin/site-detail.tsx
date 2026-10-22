@@ -2,53 +2,75 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { AdminSiteDetail, SiteReviewAction, SiteInput, SiteType } from '@hub/shared';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { toast } from 'sonner';
+import { CheckCircleIcon, XCircleIcon, PauseCircleIcon, ArrowClockwiseIcon, FloppyDiskIcon, SpinnerGapIcon } from '@phosphor-icons/react';
+import type { AdminSiteDetail, SiteReviewAction, SiteInput } from '@hub/shared';
 import { SITE_TYPE_LABELS, PROTOCOL_LABELS } from '@hub/shared';
-import { api } from '@/lib/api/client';
+import { apiWithHeaders, apiNoticeMessage } from '@/lib/api/client';
+import { UptimeBar } from '@/components/charts';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Form } from '@/components/ui/form';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { ChannelsTable } from './resources';
-import { DateValue, Status, actionRowStyle } from './common';
-import { TrustBadge, UptimeBar } from '@/components/charts';
+import { AdminTable, DataSummary, DateValue, ExternalLink, Status } from './common';
+import { AdminInput, AdminSelect, AdminSwitch, AdminTextarea, numberText, requiredText, splitValues, urlText } from './form-fields';
+
+const siteSchema = z.object({
+  name: requiredText('站点名称', 100), slug: requiredText('链接标识', 100).regex(/^[a-z0-9-]+$/, '标识仅支持小写字母、数字和短横线'), homepageUrl: urlText('官方网站', false), inviteUrl: urlText('邀请链接'), logoUrl: urlText('标志网址'),
+  type: z.enum(['new_api', 'sub2api', 'one_api', 'custom']), rechargeRatio: numberText('充值倍率', 0.00001, 1000), sortWeight: numberText('展示权重', -1000000, 1000000, true),
+  tags: z.string().refine(value => { const items = splitValues(value); return items.length <= 10 && items.every(item => item.length <= 30); }, '最多 10 个标签，每个不超过 30 个字符'), paymentMethods: z.string().refine(value => { const items = splitValues(value); return items.length <= 10 && items.every(item => item.length <= 30); }, '最多 10 个支付方式，每个不超过 30 个字符'),
+  contactEmail: z.string().max(100).refine(value => !value || z.email().safeParse(value).success, '请填写有效邮箱'), contactQq: z.string().max(50), contactWechat: z.string().max(50), contactTelegram: z.string().max(50), contactGroup: z.string().max(200),
+  isVerified: z.boolean(), isFeatured: z.boolean(), description: z.string().max(2000, '简介最多 2000 个字符'),
+});
+type SiteFields = z.infer<typeof siteSchema>;
+const reviewSchema = z.object({ action: z.enum(['approve', 'reject', 'suspend', 'restore']), reason: z.string().max(500, '审核意见最多 500 个字符') }).superRefine((values, ctx) => { if (['reject', 'suspend'].includes(values.action) && !values.reason.trim()) ctx.addIssue({ code: 'custom', path: ['reason'], message: '请填写原因，便于站长修正' }); });
+const actionLabels = { approve: '审核通过并上线', reject: '驳回申请', suspend: '下架站点', restore: '恢复上线' };
+function SiteSettings({ site }: { site: AdminSiteDetail }) {
+  const router = useRouter(); const form = useForm<SiteFields>({ resolver: zodResolver(siteSchema), defaultValues: { name: site.name, slug: site.slug, homepageUrl: site.homepageUrl, inviteUrl: site.inviteUrl ?? '', logoUrl: site.logoUrl ?? '', type: site.type, rechargeRatio: String(site.rechargeRatio), sortWeight: String(site.sortWeight), tags: site.tags.join(', '), paymentMethods: site.paymentMethods.join(', '), contactEmail: site.contact.email ?? '', contactQq: site.contact.qq ?? '', contactWechat: site.contact.wechat ?? '', contactTelegram: site.contact.telegram ?? '', contactGroup: site.contact.group ?? '', isVerified: site.isVerified, isFeatured: site.isFeatured, description: site.description ?? '' } });
+  async function save(values: SiteFields) {
+    const contact = { email: values.contactEmail, qq: values.contactQq, wechat: values.contactWechat, telegram: values.contactTelegram, group: values.contactGroup };
+    const body: SiteInput & Pick<AdminSiteDetail, 'isFeatured' | 'isVerified' | 'sortWeight'> = { name: values.name.trim(), slug: values.slug, homepageUrl: values.homepageUrl, inviteUrl: values.inviteUrl || null, logoUrl: values.logoUrl || null, description: values.description.trim() || null, type: values.type, rechargeRatio: Number(values.rechargeRatio), tags: splitValues(values.tags), paymentMethods: splitValues(values.paymentMethods), contact: Object.fromEntries(Object.entries(contact).filter(([, value]) => value.trim())), isFeatured: values.isFeatured, isVerified: values.isVerified, sortWeight: Number(values.sortWeight) };
+    try { const { headers } = await apiWithHeaders<unknown>(`/admin/sites/${site.id}`, { method: 'PATCH', body: JSON.stringify(body) }); toast.success(apiNoticeMessage(headers) ?? '站点资料已保存'); router.refresh(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : '保存失败，请稍后重试'); }
+  }
+  return <Card><CardHeader><CardTitle>站点资料与展示设置</CardTitle><CardDescription>资料与倍率修改立即生效，不触发连接检测。</CardDescription></CardHeader><CardContent><Form {...form}><form onSubmit={form.handleSubmit(save)} className="space-y-5"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <AdminInput control={form.control} name="name" label="站点名称" /><AdminInput control={form.control} name="slug" label="链接标识" /><AdminInput control={form.control} name="homepageUrl" label="官方网站" type="url" /><AdminInput control={form.control} name="inviteUrl" label="邀请链接" type="url" /><AdminInput control={form.control} name="logoUrl" label="标志网址" type="url" />
+    <AdminSelect control={form.control} name="type" label="站点类型" options={Object.entries(SITE_TYPE_LABELS).map(([value, label]) => ({ value, label }))} />
+    <AdminInput control={form.control} name="rechargeRatio" label="充值倍率" type="number" min={0.00001} step="any" description="每充值 1 元可获得的美元额度。" /><AdminInput control={form.control} name="sortWeight" label="展示权重" type="number" step={1} />
+    <AdminInput control={form.control} name="tags" label="标签" description="使用逗号分隔，最多 10 个。" /><AdminInput control={form.control} name="paymentMethods" label="支付方式" description="使用逗号分隔，最多 10 个。" />
+    <AdminInput control={form.control} name="contactEmail" label="联系邮箱" type="email" /><AdminInput control={form.control} name="contactQq" label="联系 QQ" /><AdminInput control={form.control} name="contactWechat" label="联系微信" /><AdminInput control={form.control} name="contactTelegram" label="Telegram 账号" /><AdminInput control={form.control} name="contactGroup" label="交流群" />
+    <AdminSwitch control={form.control} name="isVerified" label="官方认证" /><AdminSwitch control={form.control} name="isFeatured" label="精选展示" />
+    </div><AdminTextarea control={form.control} name="description" label="站点简介" /><Button disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? <SpinnerGapIcon className="animate-spin" /> : <FloppyDiskIcon />}保存资料</Button></form></Form></CardContent></Card>;
+}
+function TrustValue({ score, verdict }: { score: number | null; verdict: string }) { return <div className="inline-flex items-center gap-2"><span className="font-mono text-sm tabular-nums">{score ?? '—'}<span className="text-xs text-muted-foreground"> / 100</span></span><Badge variant={verdict === 'genuine' ? 'success' : verdict === 'fake' ? 'danger' : verdict === 'suspect' ? 'warning' : 'unknown'}>{({ genuine: '真模型', fake: '疑似假模型', suspect: '存疑', unknown: '未检测' } as Record<string, string>)[verdict] ?? '未检测'}</Badge></div>; }
 
 export function AdminSiteDetailView({ site }: { site: AdminSiteDetail }) {
-  const router = useRouter();
-  const [reason, setReason] = useState('');
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState('');
-  async function review(action: SiteReviewAction['action']) {
-    if ((action === 'reject' || action === 'suspend') && !reason.trim()) { setMessage('请填写驳回或下架原因，便于站长修正。'); return; }
-    setPending(true); setMessage('');
-    try { const body: SiteReviewAction = { action, ...(reason.trim() ? { reason: reason.trim() } : {}) }; await api<unknown>(`/admin/sites/${site.id}/review`, { method: 'POST', body: JSON.stringify(body) }); setMessage('审核状态已更新'); router.refresh(); }
-    catch (error) { setMessage(error instanceof Error ? error.message : '审核失败'); } finally { setPending(false); }
+  const router = useRouter(); const [reviewOpen, setReviewOpen] = useState(false); const form = useForm<z.infer<typeof reviewSchema>>({ resolver: zodResolver(reviewSchema), defaultValues: { action: 'approve', reason: '' } }); const action = form.watch('action');
+  function openReview(next: SiteReviewAction['action']) { form.reset({ action: next, reason: '' }); setReviewOpen(true); }
+  async function submitReview(values: z.infer<typeof reviewSchema>) {
+    const body: SiteReviewAction = { action: values.action, ...(values.reason.trim() ? { reason: values.reason.trim() } : {}) };
+    try { const { headers } = await apiWithHeaders<unknown>(`/admin/sites/${site.id}/review`, { method: 'POST', body: JSON.stringify(body) }); toast.success(apiNoticeMessage(headers) ?? '审核状态已更新'); setReviewOpen(false); router.refresh(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : '审核失败，请稍后重试'); }
   }
-  async function save(form: FormData) {
-    const text = (key: string) => String(form.get(key) ?? '').trim();
-    const body: SiteInput & Pick<AdminSiteDetail, 'isFeatured' | 'isVerified' | 'sortWeight'> = {
-      name: text('name'), slug: text('slug'), homepageUrl: text('homepageUrl'), inviteUrl: text('inviteUrl') || null, logoUrl: text('logoUrl') || null, description: text('description') || null,
-      type: text('type') as SiteType, rechargeRatio: Number(form.get('rechargeRatio')), tags: text('tags').split(',').map(value => value.trim()).filter(Boolean), paymentMethods: text('paymentMethods').split(',').map(value => value.trim()).filter(Boolean),
-      contact: Object.fromEntries(['email', 'qq', 'wechat', 'telegram', 'group'].map(key => [key, text(`contact.${key}`)]).filter(([, value]) => value)),
-      isFeatured: form.get('isFeatured') === 'on', isVerified: form.get('isVerified') === 'on', sortWeight: Number(form.get('sortWeight')),
-    };
-    setPending(true); setMessage('');
-    try { await api<unknown>(`/admin/sites/${site.id}`, { method: 'PATCH', body: JSON.stringify(body) }); setMessage('站点资料已保存'); router.refresh(); }
-    catch (error) { setMessage(error instanceof Error ? error.message : '保存失败'); } finally { setPending(false); }
-  }
-  return <div className="stack">
-    <section className="panel stack"><div className="row between"><div><h2>{site.name}</h2><p className="muted">{site.homepageUrl}</p></div><Status value={site.status} /></div>
-      <div className="form-grid"><div><span className="muted">站长</span><p>{site.owner.nickname} · {site.owner.email}</p></div><div><span className="muted">提交时间</span><p><DateValue value={site.submittedAt} /></p></div><div><span className="muted">上线时间</span><p><DateValue value={site.approvedAt} /></p></div><div><span className="muted">创建 / 最近修改</span><p><DateValue value={site.createdAt} /> / <DateValue value={site.updatedAt} /></p></div></div>
-      {site.reviewNote && <div className="notice">审核备注：{site.reviewNote}</div>}
-      <label className="field">审核意见<textarea className="input" value={reason} onChange={event => setReason(event.target.value)} rows={3} placeholder="驳回或下架时必填；请给出可执行的修正建议" /></label>
-      <div style={actionRowStyle}>{site.status === 'pending' && <><button disabled={pending} className="btn btn-primary" onClick={() => review('approve')}>审核通过并上线</button><button disabled={pending} className="btn" onClick={() => review('reject')}>驳回申请</button></>}{site.status === 'approved' && <button disabled={pending} className="btn" onClick={() => review('suspend')}>下架站点</button>}{site.status === 'suspended' && <button disabled={pending} className="btn btn-primary" onClick={() => review('restore')}>恢复上线</button>}</div>
-      {message && <p className="notice" role="status">{message}</p>}
-    </section>
-    <section className="panel stack"><h2>渠道与连接检查</h2><ChannelsTable items={site.channels} />
-      {site.channels.map(channel => <details key={channel.id}><summary>{channel.name} · 上游配置与模型</summary><div className="stack" style={{ marginTop: 16 }}><div className="form-grid"><div><span className="muted">上游地址</span><p className="mono" style={{ overflowWrap: 'anywhere' }}>{channel.baseUrl}</p></div><div><span className="muted">检测凭据</span><p className="mono">{channel.apiKeyMask}</p></div><div><span className="muted">最近连接结果</span><p>{channel.lastTestOk === null ? '未测试' : channel.lastTestOk ? '连接成功' : '连接失败'} · <DateValue value={channel.lastTestAt} /></p></div><div><span className="muted">备用模型 / 限流</span><p>{channel.backupModel ?? '未设置'} / {channel.rpmLimit ?? '未设置'} RPM</p></div></div>{channel.stats && <UptimeBar points={channel.stats.sparkline} />}<div className="table-wrap"><table className="data-table"><thead><tr><th>上游模型</th><th>标准模型</th><th>最近测试</th><th>可信分</th><th>失败原因</th></tr></thead><tbody>{channel.models.map(model => <tr key={model.id}><td className="mono">{model.upstreamName}</td><td>{model.displayName ?? model.modelSlug ?? '未映射'}</td><td><Status value={model.lastStatus} /></td><td><TrustBadge score={model.trustScore} verdict={model.trustVerdict} /></td><td style={{ whiteSpace: 'normal' }}>{model.lastError ?? '—'}</td></tr>)}</tbody></table></div></div></details>)}
-    </section>
-    <section className="panel stack"><h2>最近模型检测报告</h2>{site.reports.length === 0 && <p className="muted">尚未生成检测报告；可在上方渠道中发起真伪检测。</p>}{site.reports.map((report, index) => <details key={report.id ?? index} open={index === 0}><summary><span className="mono">{report.model}</span> · {PROTOCOL_LABELS[report.protocol]} · <TrustBadge score={report.score} verdict={report.verdict} /></summary><div className="table-wrap" style={{ marginTop: 16 }}><table className="data-table"><thead><tr><th>检查项目</th><th>结果</th><th>权重</th><th>证据说明</th></tr></thead><tbody>{report.checks.map(check => <tr key={check.id}><td>{check.name}</td><td><Status value={check.passed === null ? 'untested' : check.passed ? 'pass' : 'fail'} /></td><td className="mono">{check.weight}</td><td style={{ whiteSpace: 'normal', maxWidth: 600 }}>{check.detail}</td></tr>)}</tbody></table></div><p className="muted">耗时 {(report.durationMs / 1000).toFixed(1)} 秒 · <DateValue value={report.createdAt} /></p></details>)}</section>
-    <section className="panel stack"><h2>站点资料与展示设置</h2><form action={save} className="stack"><div className="form-grid">
-      {([['name', '站点名称', site.name], ['slug', '链接标识', site.slug], ['homepageUrl', '官方网站', site.homepageUrl], ['inviteUrl', '邀请链接', site.inviteUrl], ['logoUrl', 'Logo 地址', site.logoUrl]] as const).map(([name, label, value]) => <label className="field" key={name}>{label}<input className="input" name={name} required={name === 'name' || name === 'homepageUrl' || name === 'slug'} type={name.endsWith('Url') ? 'url' : 'text'} defaultValue={value ?? ''} /></label>)}
-      <label className="field">站点类型<select className="select" name="type" defaultValue={site.type}>{Object.entries(SITE_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="field">充值倍率<input className="input mono" name="rechargeRatio" type="number" min="0.00001" step="any" required defaultValue={site.rechargeRatio} /></label><label className="field">展示权重<input className="input mono" name="sortWeight" type="number" defaultValue={site.sortWeight} required /></label><label className="field">标签（逗号分隔）<input className="input" name="tags" defaultValue={site.tags.join(', ')} /></label><label className="field">支付方式（逗号分隔）<input className="input" name="paymentMethods" defaultValue={site.paymentMethods.join(', ')} /></label>
-      {(['email', 'qq', 'wechat', 'telegram', 'group'] as const).map(key => <label className="field" key={key}>联系方式 · {key}<input className="input" name={`contact.${key}`} defaultValue={site.contact[key] ?? ''} /></label>)}
-      <label className="row"><input type="checkbox" name="isVerified" defaultChecked={site.isVerified} />官方认证</label><label className="row"><input type="checkbox" name="isFeatured" defaultChecked={site.isFeatured} />精选展示</label>
-    </div><label className="field">简介<textarea className="input" rows={4} name="description" defaultValue={site.description ?? ''} /></label><div><button className="btn btn-primary" disabled={pending}>{pending ? '保存中…' : '保存资料'}</button></div></form></section>
+  return <div className="space-y-6">
+    <Card><CardHeader><div className="flex items-start justify-between gap-4"><div className="space-y-2"><CardTitle>{site.name}</CardTitle><ExternalLink href={site.homepageUrl}>{site.homepageUrl}</ExternalLink></div><Status value={site.status} /></div></CardHeader><CardContent className="space-y-5"><dl className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4"><DataSummary label="站长" value={<>{site.owner.nickname}<p className="mt-1 text-xs text-muted-foreground">{site.owner.email}</p></>} /><DataSummary label="提交时间" value={<DateValue value={site.submittedAt} />} /><DataSummary label="上线时间" value={<DateValue value={site.approvedAt} />} /><DataSummary label="最近修改" value={<DateValue value={site.updatedAt} />} /></dl>
+      {site.reviewNote && <Alert><AlertTitle>审核备注</AlertTitle><AlertDescription>{site.reviewNote}</AlertDescription></Alert>}
+      <div className="flex flex-wrap gap-2">{site.status === 'pending' && <><Button onClick={() => openReview('approve')}><CheckCircleIcon />审核通过并上线</Button><Button variant="destructive" onClick={() => openReview('reject')}><XCircleIcon />驳回申请</Button></>}{site.status === 'approved' && <Button variant="destructive" onClick={() => openReview('suspend')}><PauseCircleIcon />下架站点</Button>}{site.status === 'suspended' && <Button onClick={() => openReview('restore')}><ArrowClockwiseIcon />恢复上线</Button>}</div>
+    </CardContent></Card>
+    <Dialog open={reviewOpen} onOpenChange={setReviewOpen}><DialogContent><DialogHeader><DialogTitle>{actionLabels[action]}</DialogTitle><DialogDescription>{action === 'approve' || action === 'restore' ? '确认后站点将公开展示，并按渠道配置执行定时探测。' : '请说明具体原因与修正建议，站长会收到通知。'}</DialogDescription></DialogHeader><Form {...form}><form onSubmit={form.handleSubmit(submitReview)} className="space-y-5"><AdminTextarea control={form.control} name="reason" label={action === 'reject' || action === 'suspend' ? '审核原因（必填）' : '审核备注（选填）'} /><div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setReviewOpen(false)}>取消</Button><Button variant={action === 'reject' || action === 'suspend' ? 'destructive' : 'default'} disabled={form.formState.isSubmitting}>{form.formState.isSubmitting && <SpinnerGapIcon className="animate-spin" />}确认{actionLabels[action]}</Button></div></form></Form></DialogContent></Dialog>
+    <Card><CardHeader><CardTitle>渠道与连接检查</CardTitle><CardDescription>查看渠道配置、测试记录和模型状态。</CardDescription></CardHeader><CardContent className="space-y-5"><ChannelsTable items={site.channels} /><Accordion type="multiple">{site.channels.map(channel => <AccordionItem key={channel.id} value={String(channel.id)}><AccordionTrigger>{channel.name} · 上游配置与模型</AccordionTrigger><AccordionContent className="space-y-5"><dl className="grid gap-4 sm:grid-cols-2"><DataSummary label="上游地址" value={<span className="break-all font-mono text-xs">{channel.baseUrl}</span>} /><DataSummary label="检测凭据" value={<span className="font-mono">{channel.apiKeyMask}</span>} /><DataSummary label="最近连接结果" value={<>{channel.lastTestOk === null ? '未测试' : channel.lastTestOk ? '连接成功' : '连接失败'} · <DateValue value={channel.lastTestAt} /></>} /><DataSummary label="备用模型 / 每分钟请求上限" value={`${channel.backupModel ?? '未设置'} / ${channel.rpmLimit ?? '未设置'}`} /></dl>{channel.stats && <UptimeBar points={channel.stats.sparkline} />}<AdminTable items={channel.models} columns={[
+      { label: '上游模型', render: model => <span className="font-mono text-xs">{model.upstreamName}</span> }, { label: '标准模型', render: model => model.displayName ?? model.modelSlug ?? '未映射' }, { label: '最近测试', render: model => <Status value={model.lastStatus} /> }, { label: '可信分', render: model => <TrustValue score={model.trustScore} verdict={model.trustVerdict} /> }, { label: '失败原因', render: model => <p className="max-w-md whitespace-normal text-xs text-muted-foreground">{model.lastError ?? '—'}</p> },
+    ]} /></AccordionContent></AccordionItem>)}</Accordion></CardContent></Card>
+    <Card><CardHeader><CardTitle>最近模型检测报告</CardTitle><CardDescription>检测得分用于辅助判断，请结合各项证据阅读。</CardDescription></CardHeader><CardContent>{site.reports.length === 0 ? <p className="py-8 text-center text-sm text-muted-foreground">尚无检测报告，可在渠道操作中发起真伪检测。</p> : <Accordion type="multiple" defaultValue={[String(site.reports[0]?.id)]}>{site.reports.map((report, index) => <AccordionItem key={report.id ?? index} value={String(report.id ?? index)}><AccordionTrigger><span className="flex flex-wrap items-center gap-3"><span className="font-mono text-sm">{report.model}</span><span className="text-xs text-muted-foreground">{PROTOCOL_LABELS[report.protocol]}</span><TrustValue score={report.score} verdict={report.verdict} /></span></AccordionTrigger><AccordionContent className="space-y-3"><AdminTable items={report.checks} columns={[
+      { label: '检查项目', render: check => check.name }, { label: '结果', render: check => <Status value={check.passed === null ? 'untested' : check.passed ? 'pass' : 'fail'} /> }, { label: '权重', render: check => <span className="font-mono tabular-nums">{check.weight}</span> }, { label: '证据说明', render: check => <p className="max-w-2xl whitespace-normal">{check.detail}</p> },
+    ]} /><p className="text-xs text-muted-foreground">耗时 {(report.durationMs / 1000).toFixed(1)} 秒 · <DateValue value={report.createdAt} /></p></AccordionContent></AccordionItem>)}</Accordion>}</CardContent></Card>
+    <SiteSettings key={site.updatedAt} site={site} />
   </div>;
 }

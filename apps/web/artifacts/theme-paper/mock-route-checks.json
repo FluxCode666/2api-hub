@@ -1,0 +1,345 @@
+{
+  "mode": "mock",
+  "origin": "http://127.0.0.1:3210",
+  "checkedAt": "2026-10-22T04:36:57.529Z",
+  "results": [
+    {
+      "group": "public",
+      "path": "/",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/rankings",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/models",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/vendors",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/sites",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/verify",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/join",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/guide",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/login",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/register",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/compare",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/models/claude-fable-5-1",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/vendors/anthropic",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/sites/xinghe",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/channels/1",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "public",
+      "path": "/compare?ids=1,2",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "guest-guard",
+      "path": "/me",
+      "status": 200,
+      "expected": 307,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "guest-guard",
+      "path": "/merchant",
+      "status": 307,
+      "expected": 307,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "guest-guard",
+      "path": "/admin",
+      "status": 307,
+      "expected": 307,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "merchant",
+      "path": "/me",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "merchant",
+      "path": "/merchant",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "merchant",
+      "path": "/merchant/sites",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "merchant",
+      "path": "/merchant/onboarding",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "merchant",
+      "path": "/merchant/sites/1",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "merchant",
+      "path": "/merchant/sites/1/edit",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "merchant",
+      "path": "/merchant/onboarding?siteId=1",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "merchant",
+      "path": "/merchant/channels/1",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/reviews",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/sites",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/channels",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/probe-runs",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/tasks",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/models",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/vendors",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/users",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/feedback",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/ratings",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/announcements",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/settings",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/audit-logs",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    },
+    {
+      "group": "admin",
+      "path": "/admin/sites/13",
+      "status": 200,
+      "expected": 200,
+      "runtimeError": false,
+      "passed": true
+    }
+  ],
+  "skipped": [],
+  "passed": true
+}

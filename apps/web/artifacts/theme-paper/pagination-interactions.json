@@ -1,0 +1,10 @@
+{
+  "mobilePage2": "http://127.0.0.1:3210/rankings?page=2&pageSize=20",
+  "mobileWidth": 390,
+  "pageSizeChange": "http://127.0.0.1:3210/rankings?page=1&pageSize=50",
+  "filterReset": {
+    "url": "http://127.0.0.1:3210/rankings?pageSize=20&vendor=openai",
+    "page": 1,
+    "vendor": "openai"
+  }
+}

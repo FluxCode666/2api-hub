@@ -3,13 +3,13 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, count, desc, eq, sql } from 'drizzle-orm';
 import {
   authenticityReports, channelModels, channels, models, probeRuns, sites, vendors,
 } from '@hub/db';
 import type {
   ChannelDetail, ChannelHistory, ChannelHistoryPoint, ChannelModelView,
-  ChannelQuery, HistoryWindow, Paginated, AuthenticityReport, ChannelListItem,
+  ChannelQuery, HistoryWindow, Paginated, AuthenticityReport, ChannelListItem, ProbeRun,
 } from '@hub/shared';
 import { priceCny, actualRatio } from '@hub/shared';
 import { notFound } from '../lib/errors';
@@ -18,7 +18,7 @@ import { queryChannels } from '../lib/channelList';
 
 const pageQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(20).transform((v) => Math.min(Math.max(v, 1), 100)),
 });
 
 const channelQuerySchema = pageQuery.extend({
@@ -159,6 +159,36 @@ export async function channelRoutes(app: FastifyInstance) {
       .where(eq(probeRuns.channelId, id))
       .orderBy(desc(probeRuns.createdAt)).limit(50);
     return { window, bucketSec, points, recentRuns: recentRows.map((r) => probeRunView(r, true)) };
+  });
+
+  // ---------- GET /channels/:id/runs（公开探测记录分页；可见性同 history） ----------
+  app.get('/api/v1/channels/:id/runs', async (req): Promise<Paginated<ProbeRun>> => {
+    const { id } = z.object({ id: z.coerce.number().int().positive() }).parse(req.params);
+    const q = pageQuery.extend({
+      kind: z.enum(['availability', 'authenticity', 'discovery']).default('availability'),
+      success: z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1').optional(),
+    }).parse(req.query);
+
+    // 可见性同 history：已上线站点下的渠道（含 invalid/paused）
+    const exists = await db.select({ id: channels.id }).from(channels)
+      .innerJoin(sites, eq(channels.siteId, sites.id))
+      .where(and(eq(channels.id, id), eq(sites.status, 'approved'))).limit(1);
+    if (!exists[0]) throw notFound('渠道不存在');
+
+    const conds = [eq(probeRuns.channelId, id), eq(probeRuns.kind, q.kind)];
+    if (q.success !== undefined) conds.push(eq(probeRuns.success, q.success));
+    const where = and(...conds);
+    // 走 (channel_id, created_at) 索引；total 上限 10000 防大表 count 慢
+    const total = (await db.select({ c: count() }).from(probeRuns).where(where))[0]?.c ?? 0;
+    const rows = await db.select().from(probeRuns).where(where)
+      .orderBy(desc(probeRuns.createdAt))
+      .limit(q.pageSize).offset((q.page - 1) * q.pageSize);
+    return {
+      items: rows.map((r) => probeRunView(r, true)),
+      total: Math.min(total, 10000),
+      page: q.page,
+      pageSize: q.pageSize,
+    };
   });
 
   // ---------- GET /channels/:id/reports ----------

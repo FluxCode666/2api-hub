@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-10-22T04:47:05.355Z",
+  "writes": false,
+  "source": "api-integration-results.json",
+  "checks": [
+    {
+      "label": "公开探测日志服务端分页、失败筛选与标准错误",
+      "status": "PASS",
+      "ms": 68,
+      "detail": ""
+    },
+    {
+      "label": "个人收藏服务端分页与跨页连续排名",
+      "status": "PASS",
+      "ms": 53,
+      "detail": ""
+    },
+    {
+      "label": "站内通知服务端分页、全局未读数与输入校验",
+      "status": "PASS",
+      "ms": 29,
+      "detail": ""
+    },
+    {
+      "label": "Next 同源 API 代理与真实 Cookie",
+      "status": "PASS",
+      "ms": 75,
+      "detail": ""
+    }
+  ]
+}

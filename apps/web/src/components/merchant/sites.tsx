@@ -1,14 +1,45 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import type { MerchantSite } from '@hub/shared';
 import { SITE_TYPE_LABELS } from '@hub/shared';
 import { api } from '@/lib/api/client';
-import { Empty, StatusBadge, FormatDate } from '@/components/ui';
+import type { SearchValues } from '@/lib/query';
+import { paginationValues, slicePage } from '@/lib/pagination';
+import { DataPagination } from '@/components/data-pagination';
+import { Empty, StatusBadge, FormatDate } from '@/components/page-kit';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { errorMessage } from './forms';
-export function SitesList({ sites: initialSites }: { sites: MerchantSite[] }) {
-  const [sites, setSites] = useState(initialSites); const [deleting, setDeleting] = useState<number | null>(null); const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const router = useRouter();
-  async function remove(id: number) { setBusy(true); setError(''); try { await api(`/merchant/sites/${id}`, { method: 'DELETE' }); setSites((current) => current.filter((s) => s.id !== id)); setDeleting(null); router.refresh(); } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); } }
-  return <div className="stack">{error && <div role="alert" className="notice notice-error">{error}</div>}{sites.length ? <div className="merchant-site-grid">{sites.map((site) => <article className="panel stack" key={site.id}><div className="merchant-channel-title"><div><span className="muted merchant-small">{SITE_TYPE_LABELS[site.type]}</span><h2>{site.name}</h2></div><StatusBadge status={site.status} /></div><p className="muted merchant-small">{site.description ?? '尚未填写站点简介'}</p><div className="row between"><span className="mono">{site.channelCount} 条渠道</span><span className="muted merchant-small">更新于 <FormatDate value={site.updatedAt} /></span></div>{site.reviewNote && <div className="notice notice-error">审核反馈：{site.reviewNote}</div>}<div className="row"><Link className="btn btn-small" href={`/merchant/sites/${site.id}`}>管理站点</Link>{['draft', 'rejected'].includes(site.status) && <><Link className="btn btn-primary btn-small" href={`/merchant/onboarding?siteId=${site.id}`}>继续入驻</Link><button className="btn btn-small" onClick={() => setDeleting(site.id)}>删除</button></>}{site.status === 'approved' && <Link className="merchant-link merchant-small" href={`/sites/${site.slug}`}>查看公开档案 →</Link>}</div>{deleting === site.id && <div className="merchant-confirm"><span className="merchant-small">删除站点将同时移除旗下渠道，确认删除？</span><button className="btn btn-small" disabled={busy} onClick={() => remove(site.id)}>{busy ? '正在删除…' : '确认删除'}</button><button className="btn btn-small" onClick={() => setDeleting(null)}>取消</button></div>}</article>)}</div> : <Empty title="你的第一个站点，从这里开始" description="创建站点草稿，添加渠道，连接成功后即可提交审核。" />}</div>;
+
+export function SitesList({ sites: initialSites, values }: { sites: MerchantSite[]; values: SearchValues }) {
+  const [sites, setSites] = useState(initialSites);
+  const [deleting, setDeleting] = useState<MerchantSite | null>(null);
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
+  useEffect(() => setSites(initialSites), [initialSites]);
+  const pagination = paginationValues(values);
+  const page = Math.min(pagination.page, Math.max(1, Math.ceil(sites.length / pagination.pageSize)));
+  async function remove() {
+    if (!deleting) return;
+    setBusy(true);
+    try { await api(`/merchant/sites/${deleting.id}`, { method: 'DELETE' }); setSites((current) => current.filter((site) => site.id !== deleting.id)); setDeleting(null); toast.success('站点已删除。'); router.refresh(); }
+    catch (error) { toast.error(errorMessage(error)); }
+    finally { setBusy(false); }
+  }
+  return <div className="space-y-6">
+    {sites.length ? <div className="grid gap-4 xl:grid-cols-2">{slicePage(sites, page, pagination.pageSize).map((site) => <Card key={site.id}>
+      <CardHeader><div className="flex flex-wrap items-start justify-between gap-3"><div className="space-y-2"><CardDescription>{SITE_TYPE_LABELS[site.type]}</CardDescription><CardTitle>{site.name}</CardTitle></div><StatusBadge status={site.status} /></div></CardHeader>
+      <CardContent className="space-y-5"><p className="text-sm text-muted-foreground">{site.description ?? '尚未填写站点简介'}</p><div className="flex flex-wrap items-center justify-between gap-3 text-sm"><span className="font-mono tabular-nums">{site.channelCount} 条渠道</span><span className="text-muted-foreground">更新于 <FormatDate value={site.updatedAt} /></span></div>
+        {site.reviewNote && <Alert variant="destructive"><AlertDescription>审核反馈：{site.reviewNote}</AlertDescription></Alert>}
+        <div className="flex flex-wrap gap-2"><Button asChild size="sm" variant="outline"><Link href={`/merchant/sites/${site.id}`}>管理站点</Link></Button>{['draft', 'rejected'].includes(site.status) && <><Button asChild size="sm"><Link href={`/merchant/onboarding?siteId=${site.id}`}>继续入驻</Link></Button><Button size="sm" variant="destructive" onClick={() => setDeleting(site)}>删除</Button></>}{site.status === 'approved' && <Button asChild size="sm" variant="ghost"><Link href={`/sites/${site.slug}`}>查看公开档案</Link></Button>}</div>
+      </CardContent>
+    </Card>)}</div> : <Empty title="你的第一个站点，从这里开始" description="创建站点草稿，添加渠道，连接成功后即可提交审核。" />}
+    <DataPagination page={page} pageSize={pagination.pageSize} total={sites.length} base="/merchant/sites" values={values} />
+    <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => { if (!busy && !open) setDeleting(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>删除「{deleting?.name}」？</AlertDialogTitle><AlertDialogDescription>站点及其旗下渠道将同时删除，此操作无法撤销。</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel disabled={busy}>取消</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={(event) => { event.preventDefault(); void remove(); }}>{busy ? '正在删除…' : '确认删除'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+  </div>;
 }

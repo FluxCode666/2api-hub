@@ -1,0 +1,14 @@
+{
+  "dark": {
+    "dark": true,
+    "data": "dark",
+    "background": "rgb(18, 17, 16)",
+    "meta": "#121110"
+  },
+  "light": {
+    "dark": false,
+    "data": "light",
+    "background": "rgb(246, 244, 239)",
+    "meta": "#F6F4EF"
+  }
+}

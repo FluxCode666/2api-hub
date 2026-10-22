@@ -1,32 +1,37 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { SettingsMap, ScoringWeights } from '@hub/shared';
-import { api } from '@/lib/api/client';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { toast } from 'sonner';
+import { FloppyDiskIcon, SpinnerGapIcon } from '@phosphor-icons/react';
+import type { SettingsMap } from '@hub/shared';
+import { apiWithHeaders, apiNoticeMessage } from '@/lib/api/client';
+import { Button } from '@/components/ui/button';
+import { Form } from '@/components/ui/form';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminInput, AdminSwitch, numberText } from './form-fields';
 
 const numericSettings = [
-  ['probe.defaultIntervalSec', '默认探测间隔（秒）', 30], ['probe.concurrency', '全局探测并发', 1], ['probe.perSiteConcurrency', '单站点并发', 1], ['probe.timeoutMs', '探测超时（毫秒）', 1000],
-  ['authenticity.intervalHours', '真伪检测间隔（小时）', 1], ['authenticity.merchantDailyLimit', '站长每日手动检测次数', 1], ['verify.hourlyLimitPerIp', '公开鉴定每 IP 每小时次数', 1],
+  ['defaultIntervalSec', 'probe.defaultIntervalSec', '默认探测间隔（秒）', 30, 86400], ['concurrency', 'probe.concurrency', '全局探测并发', 1, 100], ['perSiteConcurrency', 'probe.perSiteConcurrency', '单站点并发', 1, 20], ['timeoutMs', 'probe.timeoutMs', '探测超时（毫秒）', 1000, 120000],
+  ['intervalHours', 'authenticity.intervalHours', '真伪检测间隔（小时）', 1, 720], ['merchantDailyLimit', 'authenticity.merchantDailyLimit', '站长每日手动检测次数', 1, 100], ['hourlyLimitPerIp', 'verify.hourlyLimitPerIp', '公开鉴定每个 IP 每小时次数', 1, 1000],
 ] as const;
+const weightFields = ['uptime', 'latency', 'trust', 'stability'] as const;
+const settingsSchema = z.object({ defaultIntervalSec: numberText('默认探测间隔', 30, 86400, true), concurrency: numberText('全局探测并发', 1, 100, true), perSiteConcurrency: numberText('单站点并发', 1, 20, true), timeoutMs: numberText('探测超时', 1000, 120000, true), intervalHours: numberText('真伪检测间隔', 1, 720, true), merchantDailyLimit: numberText('每日检测次数', 1, 100, true), hourlyLimitPerIp: numberText('每小时鉴定次数', 1, 1000, true), uptime: numberText('可用率权重', 0, 1), latency: numberText('响应延迟权重', 0, 1), trust: numberText('可信分权重', 0, 1), stability: numberText('稳定性权重', 0, 1), allowRegistration: z.boolean(), announcementBar: z.string().max(500, '公告栏最多 500 个字符') }).superRefine((values, ctx) => { if (weightFields.reduce((sum, key) => sum + Number(values[key]), 0) <= 0) ctx.addIssue({ code: 'custom', path: ['uptime'], message: '评分权重总和必须大于 0' }); });
+type SettingsFields = z.infer<typeof settingsSchema>;
 export function SettingsEditor({ settings }: { settings: SettingsMap }) {
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState('');
-  const router = useRouter();
-  async function save(form: FormData) {
-    const weights: ScoringWeights = { uptime: Number(form.get('uptime')), latency: Number(form.get('latency')), trust: Number(form.get('trust')), stability: Number(form.get('stability')) };
-    const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
-    if (!Number.isFinite(total) || total <= 0) { setMessage('评分权重总和必须大于 0'); return; }
-    const body: SettingsMap = { ...settings, 'scoring.weights': weights, 'site.allowRegistration': form.get('allowRegistration') === 'on', 'site.announcementBar': String(form.get('announcementBar') ?? '') };
-    for (const [key] of numericSettings) body[key] = Number(form.get(key));
-    setPending(true); setMessage('');
-    try { await api<SettingsMap>('/admin/settings', { method: 'PUT', body: JSON.stringify(body) }); setMessage('系统设置已更新'); router.refresh(); }
-    catch (error) { setMessage(error instanceof Error ? error.message : '保存失败'); } finally { setPending(false); }
+  const router = useRouter(); const weights = settings['scoring.weights'];
+  const form = useForm<SettingsFields>({ resolver: zodResolver(settingsSchema), defaultValues: { defaultIntervalSec: String(settings['probe.defaultIntervalSec']), concurrency: String(settings['probe.concurrency']), perSiteConcurrency: String(settings['probe.perSiteConcurrency']), timeoutMs: String(settings['probe.timeoutMs']), intervalHours: String(settings['authenticity.intervalHours']), merchantDailyLimit: String(settings['authenticity.merchantDailyLimit']), hourlyLimitPerIp: String(settings['verify.hourlyLimitPerIp']), uptime: String(weights.uptime), latency: String(weights.latency), trust: String(weights.trust), stability: String(weights.stability), allowRegistration: settings['site.allowRegistration'], announcementBar: settings['site.announcementBar'] } });
+  async function save(values: SettingsFields) {
+    const body: SettingsMap = { ...settings, 'scoring.weights': { uptime: Number(values.uptime), latency: Number(values.latency), trust: Number(values.trust), stability: Number(values.stability) }, 'site.allowRegistration': values.allowRegistration, 'site.announcementBar': values.announcementBar };
+    for (const [name, key] of numericSettings) body[key] = Number(values[name]);
+    try { const { headers } = await apiWithHeaders<unknown>('/admin/settings', { method: 'PUT', body: JSON.stringify(body) }); toast.success(apiNoticeMessage(headers) ?? '系统设置已保存'); router.refresh(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : '保存失败，请稍后重试'); }
   }
-  return <form action={save} className="stack">
-    <section className="panel stack"><h2>探测与访问限制</h2><div className="form-grid">{numericSettings.map(([key, label, min]) => <label key={key} className="field">{label}<input className="input mono" type="number" min={min} step="1" name={key} defaultValue={settings[key]} required /></label>)}</div></section>
-    <section className="panel stack"><h2>推荐分权重</h2><p className="muted">权重按总和归一化计算。价格独立排序，不计入推荐分；低于 6 个样本时不计算推荐分。</p><div className="form-grid">{([['uptime', '可用率'], ['latency', '响应延迟'], ['trust', '模型可信分'], ['stability', '连续稳定性']] as const).map(([key, label]) => <label key={key} className="field">{label}<input className="input mono" type="number" min="0" max="1" step="0.01" name={key} defaultValue={settings['scoring.weights'][key]} required /></label>)}</div></section>
-    <section className="panel stack"><h2>站点设置</h2><label className="row"><input name="allowRegistration" type="checkbox" defaultChecked={settings['site.allowRegistration']} />开放新用户注册</label><label className="field">全站公告栏<input className="input" name="announcementBar" defaultValue={settings['site.announcementBar']} /></label></section>
-    {message && <div className="notice" role="status">{message}</div>}<div><button className="btn btn-primary" disabled={pending}>{pending ? '保存中…' : '保存系统设置'}</button></div>
-  </form>;
+  return <Form {...form}><form onSubmit={form.handleSubmit(save)} className="space-y-6"><Card><CardHeader><CardTitle>探测与访问限制</CardTitle><CardDescription>按服务容量调整频率与并发，修改后自动应用。</CardDescription></CardHeader><CardContent className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{numericSettings.map(([name, , label, min, max]) => <AdminInput key={name} control={form.control} name={name} label={label} type="number" min={min} max={max} step={1} />)}</CardContent></Card>
+    <Card><CardHeader><CardTitle>推荐分权重</CardTitle><CardDescription>权重按总和归一化。价格独立排序；不足 6 个样本时不计算推荐分。</CardDescription></CardHeader><CardContent className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">{([['uptime', '可用率'], ['latency', '响应延迟'], ['trust', '模型可信分'], ['stability', '连续稳定性']] as const).map(([name, label]) => <AdminInput key={name} control={form.control} name={name} label={label} type="number" min={0} max={1} step={0.01} />)}</CardContent></Card>
+    <Card><CardHeader><CardTitle>站点设置</CardTitle></CardHeader><CardContent className="space-y-5"><AdminSwitch control={form.control} name="allowRegistration" label="开放新用户注册" /><AdminInput control={form.control} name="announcementBar" label="全站公告栏" /></CardContent></Card>
+    <Button disabled={form.formState.isSubmitting}>{form.formState.isSubmitting ? <SpinnerGapIcon className="animate-spin" /> : <FloppyDiskIcon />}保存系统设置</Button>
+  </form></Form>;
 }

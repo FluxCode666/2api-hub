@@ -162,10 +162,16 @@ export async function mockRequest(path: string, method: string, body: unknown, u
     return model;
   }
   if (verb === 'GET' && pathname === '/channels') return paginate(channelList(query, user), query);
-  const channelPath = pathname.match(/^\/channels\/(\d+)(?:\/(history|reports))?$/);
+  const channelPath = pathname.match(/^\/channels\/(\d+)(?:\/(history|reports|runs))?$/);
   if (verb === 'GET' && channelPath) {
     const channel = channelFor(Number(channelPath[1]));
     if (channelPath[2] === 'history') return channelHistory(channel, query);
+    if (channelPath[2] === 'runs') {
+      const success = query.get('success'); const kind = query.get('kind');
+      if (success !== null && !['true', 'false'].includes(success)) throw new MockError(400, 'invalid_success', '成功状态必须为 true 或 false。');
+      if (kind !== null && !['availability', 'authenticity', 'discovery'].includes(kind)) throw new MockError(400, 'invalid_kind', '不支持的探测类型。');
+      return paginate(mockRuns(channel).filter(run => (!kind || run.kind === kind) && (!success || run.success === (success === 'true'))).slice(0, 10000), query);
+    }
     if (channelPath[2] === 'reports') return channel.latestReport ? [channel.latestReport] : [];
     return withFavorite(channel, user);
   }
@@ -181,7 +187,7 @@ export async function mockRequest(path: string, method: string, body: unknown, u
   const sitePath = pathname.match(/^\/sites\/([^/]+)(?:\/(reviews))?$/);
   if (sitePath) {
     const site = siteFor(decodeURIComponent(sitePath[1]!));
-    if (verb === 'GET' && sitePath[2] === 'reviews') return paginate(mockCommunityStore.reviews.filter((review) => review.siteId === site.id && review.status !== 'hidden').map(({ userId: _userId, siteId: _siteId, status: _status, ...review }) => review), query);
+    if (verb === 'GET' && sitePath[2] === 'reviews') return paginate(mockCommunityStore.reviews.filter((review) => review.siteId === site.id && review.status !== 'hidden').sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id).map(({ userId: _userId, siteId: _siteId, status: _status, ...review }) => review), query);
     if (verb === 'POST' && sitePath[2] === 'reviews') {
       const actor = requiredUser(user); const data = objectBody(body);
       if (!Number.isInteger(data.rating) || Number(data.rating) < 1 || Number(data.rating) > 5 || typeof data.content !== 'string' || !data.content.trim()) throw new MockError(400, 'invalid_review', '请填写 1–5 分评分与评价内容。');
@@ -255,7 +261,7 @@ export async function mockRequest(path: string, method: string, body: unknown, u
       return { ok: true };
     }
     const favorites = mockCommunityStore.favorites[actor.id] ??= [];
-    if (verb === 'GET' && pathname === '/me/favorites') return publicChannels().filter((channel) => favorites.includes(channel.id)).map((channel) => withFavorite(channel, actor));
+    if (verb === 'GET' && pathname === '/me/favorites') return paginate(publicChannels().filter((channel) => favorites.includes(channel.id)).map((channel, index) => ({ ...withFavorite(channel, actor), rank: index + 1 })), query);
     const favoritePath = pathname.match(/^\/me\/favorites\/(\d+)$/);
     if (favoritePath && ['POST', 'DELETE'].includes(verb)) {
       const channel = channelFor(Number(favoritePath[1]));
@@ -264,7 +270,7 @@ export async function mockRequest(path: string, method: string, body: unknown, u
       return { ok: true };
     }
     const notifications = mockCommunityStore.notifications[actor.id] ??= [{ id: 1, type: 'welcome', title: '欢迎来到 2API Hub', body: '收藏感兴趣的渠道，随时比较价格与稳定性。此通知为演示数据。', link: '/rankings', readAt: null, createdAt: mockNow }];
-    if (verb === 'GET' && pathname === '/me/notifications') return notifications;
+    if (verb === 'GET' && pathname === '/me/notifications') return { ...paginate([...notifications].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), query), unreadCount: notifications.filter(item => !item.readAt).length };
     if (verb === 'POST' && pathname === '/me/notifications/read') {
       const data = body ? objectBody(body) : {};
       if (data.ids !== undefined && (!Array.isArray(data.ids) || !data.ids.every((id) => Number.isInteger(id)))) throw new MockError(400, 'invalid_ids', '通知编号必须为数字数组。');

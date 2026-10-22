@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useSyncExternalStore } from 'react';
-import type { ChannelListItem } from '@hub/shared';
+import type { ChannelListItem, Paginated } from '@hub/shared';
 import { api, ApiRequestError } from './client';
 
 let ids: readonly number[] | null = null;
@@ -28,8 +28,11 @@ async function loadFavorites(): Promise<readonly number[]> {
   if (loading) return loading;
   if (ids !== null && Date.now() - updatedAt < 60_000) return ids;
   const requestVersion = version;
-  loading = api<ChannelListItem[]>('/me/favorites')
-    .then(items => items.map(item => item.id))
+  loading = api<Paginated<ChannelListItem>>('/me/favorites?pageSize=100')
+    .then(async first => {
+      const pages = await Promise.all(Array.from({ length: Math.max(0, Math.ceil(first.total / first.pageSize) - 1) }, (_, index) => api<Paginated<ChannelListItem>>(`/me/favorites?page=${index + 2}&pageSize=100`)));
+      return [...first.items, ...pages.flatMap(page => page.items)].map(item => item.id);
+    })
     .catch((error: unknown) => {
       if (error instanceof ApiRequestError && error.status === 401) return [];
       throw error;

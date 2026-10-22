@@ -230,6 +230,7 @@ API Key 使用 AES-256-GCM 加密存储（`APP_ENCRYPTION_KEY`，格式 `v1:<iv 
 | GET | `/channels/:id` | 渠道详情（统计、模型列表、最近检测报告、sparkline） | `ChannelDetail` |
 | GET | `/channels/:id/history` | 探测时间序列，query：`window=1h|24h|7d|30d` | `ChannelHistory` |
 | GET | `/channels/:id/reports` | 真伪检测报告列表（最近 20 条） | `AuthenticityReport[]` |
+| GET | `/channels/:id/runs` | 探测记录（分页，query `kind`、`success`；errorMessage 按 errorCode 映射为中文分类，不返回原始错误） | `Paginated<ProbeRun>` |
 | GET | `/sites` | 站点目录，query：`q`、`type`、`vendor`、`sort=score|uptime|channels|newest`、分页 | `Paginated<SiteListItem>` |
 | GET | `/sites/:slug` | 站点档案（基本信息、统计、渠道列表、评价摘要） | `SiteDetail` |
 | GET | `/sites/:slug/reviews` | 评价列表（分页） | `Paginated<Review>` |
@@ -260,13 +261,13 @@ API Key 使用 AES-256-GCM 加密存储（`APP_ENCRYPTION_KEY`，格式 `v1:<iv 
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| GET | `/me/favorites` | 收藏的渠道 `ChannelListItem[]` |
+| GET | `/me/favorites` | 收藏的渠道（分页）`Paginated<ChannelListItem>` |
 | POST | `/me/favorites/:channelId` | 收藏 |
 | DELETE | `/me/favorites/:channelId` | 取消收藏 |
 | POST | `/sites/:slug/reviews` | `{ rating 1-5, content }` 每用户每站点 1 条（再次提交为更新） |
 | GET | `/me/reviews` | 我的评价（分页）`Paginated<MyReview>` |
 | DELETE | `/me/reviews/:id` | 删除自己的评价 |
-| GET | `/me/notifications` | 站内通知 |
+| GET | `/me/notifications` | 站内通知（分页，query `unread=true` 仅未读）`NotificationList` |
 | POST | `/me/notifications/read` | `{ ids?: number[] }` 全部或部分已读 |
 
 ### 7.4 站长后台（需登录；只能操作自己的站点）
@@ -299,6 +300,7 @@ API Key 使用 AES-256-GCM 加密存储（`APP_ENCRYPTION_KEY`，格式 `v1:<iv 
 | GET | `/admin/sites/:id` | 站点全量详情（含渠道、最近检测） |
 | POST | `/admin/sites/:id/review` | `{ action: 'approve'|'reject'|'suspend'|'restore', reason? }` |
 | PATCH | `/admin/sites/:id` | 修改任意字段（含 `isFeatured`、`isVerified`、`sortWeight`） |
+| GET | `/admin/channels` | 全部渠道（分页），query `q`（站点名/渠道名/baseUrl host）、`status`、`siteId`、`siteStatus`、`vendor`、`protocol`、`sort=recent|uptime|trust|failures` | `Paginated<AdminChannel>` |
 | POST | `/admin/channels/:id/probe` | 立即触发 `{ kind: 'availability'|'authenticity'|'discovery' }` → `ProbeTask` |
 | PATCH | `/admin/channels/:id` | 修改渠道（含 `probeEnabled`、`probeIntervalSec`、`status`） |
 | GET/POST | `/admin/vendors` | 厂商列表 / 新建 |

@@ -1,0 +1,2 @@
+import {Accordion,AccordionItem,AccordionTrigger,AccordionContent} from '@/components/ui/accordion';
+export function FaqList({items}:{items:readonly (readonly [string,string])[]}){return <Accordion type="multiple" className="mt-8">{items.map(([question,answer],index)=><AccordionItem key={question} value={String(index)}><AccordionTrigger className="py-6 text-base">{question}</AccordionTrigger><AccordionContent className="max-w-3xl text-muted-foreground">{answer}</AccordionContent></AccordionItem>)}</Accordion>}

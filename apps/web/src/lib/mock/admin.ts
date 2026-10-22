@@ -1,3 +1,4 @@
+import {themes} from '@/lib/theme';
 import { actualRatio, computeRecommendScore, DEFAULT_SETTINGS } from '@hub/shared';
 import type { AdminModel, AdminOverview, AdminReview, AdminSite, AdminSiteDetail, AdminUser, AdminVendor, Announcement, AuditLog, ChannelInput, FeedbackItem, MerchantChannel, ModelInput, Paginated, ProbeKind, ProbeRun, ProbeTask, ReviewStatus, Role, SessionUser, SettingsMap, SiteInput, SiteReviewAction, VendorInput, VendorRef } from '@hub/shared';
 import { mockAnnouncements, mockModels, mockReport, mockUsers, mockVendors } from './fixtures';
@@ -163,7 +164,7 @@ export async function mockAdmin(path: string, method: string, body: unknown, use
     const input = record(body) as unknown as VendorInput;
     if (!input.name?.trim() || !input.slug?.trim()) throw new MockError(400, 'validation', '请填写厂商名称和标识');
     if (db.vendors.some(item => item.slug === input.slug && item.id !== id)) throw new MockError(409, 'slug_exists', '厂商标识已存在');
-    const value: AdminVendor = { id: id ?? db.nextId++, slug: input.slug, name: input.name, nameZh: input.nameZh ?? null, color: input.color ?? '#bbf49a', iconUrl: input.iconUrl !== undefined ? input.iconUrl : existing?.iconUrl ?? null, website: input.website !== undefined ? input.website : existing?.website ?? null, description: input.description !== undefined ? input.description : existing?.description ?? null, modelCount: existing?.modelCount ?? 0, channelCount: existing?.channelCount ?? 0, sortOrder: input.sortOrder ?? existing?.sortOrder ?? 0 };
+    const value: AdminVendor = { id: id ?? db.nextId++, slug: input.slug, name: input.name, nameZh: input.nameZh ?? null, color: input.color ?? themes.light.primary, iconUrl: input.iconUrl !== undefined ? input.iconUrl : existing?.iconUrl ?? null, website: input.website !== undefined ? input.website : existing?.website ?? null, description: input.description !== undefined ? input.description : existing?.description ?? null, modelCount: existing?.modelCount ?? 0, channelCount: existing?.channelCount ?? 0, sortOrder: input.sortOrder ?? existing?.sortOrder ?? 0 };
     if (existing) { const previousSlug = existing.slug; Object.assign(existing, value); db.models.forEach(model => { if (model.vendor.slug === previousSlug) model.vendor = vendorRef(value); }); } else db.vendors.push(value);
     audit(user, `vendor.${existing ? 'update' : 'create'}`, 'vendor', value.id, record(body)); return value;
   }

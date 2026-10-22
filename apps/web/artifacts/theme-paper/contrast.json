@@ -1,0 +1,742 @@
+[
+  {
+    "theme": "light",
+    "label": "foreground",
+    "surface": "background",
+    "foreground": "#16130F",
+    "background": "#F6F4EF",
+    "ratio": 16.845,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "muted-foreground",
+    "surface": "background",
+    "foreground": "#6B655B",
+    "background": "#F6F4EF",
+    "ratio": 5.252,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "primary",
+    "surface": "background",
+    "foreground": "#C4313B",
+    "background": "#F6F4EF",
+    "ratio": 4.963,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "success",
+    "surface": "background",
+    "foreground": "#246B45",
+    "background": "#F6F4EF",
+    "ratio": 5.853,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "warning",
+    "surface": "background",
+    "foreground": "#875500",
+    "background": "#F6F4EF",
+    "ratio": 5.738,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "danger",
+    "surface": "background",
+    "foreground": "#7C2948",
+    "background": "#F6F4EF",
+    "ratio": 8.425,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "unknown",
+    "surface": "background",
+    "foreground": "#6D675F",
+    "background": "#F6F4EF",
+    "ratio": 5.087,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "input边线",
+    "surface": "background",
+    "foreground": "#898174",
+    "background": "#F6F4EF",
+    "ratio": 3.502,
+    "minimum": 3,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "foreground",
+    "surface": "card",
+    "foreground": "#16130F",
+    "background": "#FFFFFF",
+    "ratio": 18.516,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "muted-foreground",
+    "surface": "card",
+    "foreground": "#6B655B",
+    "background": "#FFFFFF",
+    "ratio": 5.773,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "primary",
+    "surface": "card",
+    "foreground": "#C4313B",
+    "background": "#FFFFFF",
+    "ratio": 5.455,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "success",
+    "surface": "card",
+    "foreground": "#246B45",
+    "background": "#FFFFFF",
+    "ratio": 6.434,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "warning",
+    "surface": "card",
+    "foreground": "#875500",
+    "background": "#FFFFFF",
+    "ratio": 6.307,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "danger",
+    "surface": "card",
+    "foreground": "#7C2948",
+    "background": "#FFFFFF",
+    "ratio": 9.26,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "unknown",
+    "surface": "card",
+    "foreground": "#6D675F",
+    "background": "#FFFFFF",
+    "ratio": 5.592,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "input边线",
+    "surface": "card",
+    "foreground": "#898174",
+    "background": "#FFFFFF",
+    "ratio": 3.849,
+    "minimum": 3,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "foreground",
+    "surface": "panel-high",
+    "foreground": "#16130F",
+    "background": "#EFECE5",
+    "ratio": 15.694,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "muted-foreground",
+    "surface": "panel-high",
+    "foreground": "#6B655B",
+    "background": "#EFECE5",
+    "ratio": 4.893,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "primary",
+    "surface": "panel-high",
+    "foreground": "#C4313B",
+    "background": "#EFECE5",
+    "ratio": 4.624,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "success",
+    "surface": "panel-high",
+    "foreground": "#246B45",
+    "background": "#EFECE5",
+    "ratio": 5.453,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "warning",
+    "surface": "panel-high",
+    "foreground": "#875500",
+    "background": "#EFECE5",
+    "ratio": 5.346,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "danger",
+    "surface": "panel-high",
+    "foreground": "#7C2948",
+    "background": "#EFECE5",
+    "ratio": 7.849,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "unknown",
+    "surface": "panel-high",
+    "foreground": "#6D675F",
+    "background": "#EFECE5",
+    "ratio": 4.74,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "input边线",
+    "surface": "panel-high",
+    "foreground": "#898174",
+    "background": "#EFECE5",
+    "ratio": 3.262,
+    "minimum": 3,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "primary-foreground",
+    "surface": "primary",
+    "foreground": "#FFFFFF",
+    "background": "#C4313B",
+    "ratio": 5.455,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "按钮hover文字",
+    "surface": "primary混入foreground 5%",
+    "foreground": "#FFFFFF",
+    "background": "#bb3039",
+    "ratio": 5.842,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "success",
+    "surface": "徽章底色5%",
+    "foreground": "#246B45",
+    "background": "#f4f8f6",
+    "ratio": 6.006,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "warning",
+    "surface": "徽章底色5%",
+    "foreground": "#875500",
+    "background": "#f9f7f2",
+    "ratio": 5.891,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "danger",
+    "surface": "徽章底色5%",
+    "foreground": "#7C2948",
+    "background": "#f8f4f6",
+    "ratio": 8.494,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "vendor-anthropic",
+    "surface": "panel-high",
+    "foreground": "#93452D",
+    "background": "#EFECE5",
+    "ratio": 5.687,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "vendor-openai",
+    "surface": "panel-high",
+    "foreground": "#57534B",
+    "background": "#EFECE5",
+    "ratio": 6.486,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "vendor-google",
+    "surface": "panel-high",
+    "foreground": "#395C98",
+    "background": "#EFECE5",
+    "ratio": 5.636,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "vendor-deepseek",
+    "surface": "panel-high",
+    "foreground": "#53519A",
+    "background": "#EFECE5",
+    "ratio": 5.911,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "vendor-xai",
+    "surface": "panel-high",
+    "foreground": "#36332E",
+    "background": "#EFECE5",
+    "ratio": 10.66,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "vendor-zhipu",
+    "surface": "panel-high",
+    "foreground": "#3E5882",
+    "background": "#EFECE5",
+    "ratio": 6.089,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "vendor-moonshot",
+    "surface": "panel-high",
+    "foreground": "#675039",
+    "background": "#EFECE5",
+    "ratio": 6.395,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "light",
+    "label": "vendor-bytedance",
+    "surface": "panel-high",
+    "foreground": "#6F4D67",
+    "background": "#EFECE5",
+    "ratio": 6.068,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "foreground",
+    "surface": "background",
+    "foreground": "#F2EFE9",
+    "background": "#121110",
+    "ratio": 16.435,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "muted-foreground",
+    "surface": "background",
+    "foreground": "#A39E94",
+    "background": "#121110",
+    "ratio": 7.074,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "primary",
+    "surface": "background",
+    "foreground": "#FF6B6F",
+    "background": "#121110",
+    "ratio": 6.812,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "success",
+    "surface": "background",
+    "foreground": "#83CFA0",
+    "background": "#121110",
+    "ratio": 10.237,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "warning",
+    "surface": "background",
+    "foreground": "#E4B663",
+    "background": "#121110",
+    "ratio": 10.033,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "danger",
+    "surface": "background",
+    "foreground": "#E4A0C0",
+    "background": "#121110",
+    "ratio": 9.061,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "unknown",
+    "surface": "background",
+    "foreground": "#AAA398",
+    "background": "#121110",
+    "ratio": 7.546,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "input边线",
+    "surface": "background",
+    "foreground": "#777168",
+    "background": "#121110",
+    "ratio": 3.904,
+    "minimum": 3,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "foreground",
+    "surface": "card",
+    "foreground": "#F2EFE9",
+    "background": "#1A1917",
+    "ratio": 15.308,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "muted-foreground",
+    "surface": "card",
+    "foreground": "#A39E94",
+    "background": "#1A1917",
+    "ratio": 6.589,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "primary",
+    "surface": "card",
+    "foreground": "#FF6B6F",
+    "background": "#1A1917",
+    "ratio": 6.345,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "success",
+    "surface": "card",
+    "foreground": "#83CFA0",
+    "background": "#1A1917",
+    "ratio": 9.535,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "warning",
+    "surface": "card",
+    "foreground": "#E4B663",
+    "background": "#1A1917",
+    "ratio": 9.345,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "danger",
+    "surface": "card",
+    "foreground": "#E4A0C0",
+    "background": "#1A1917",
+    "ratio": 8.44,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "unknown",
+    "surface": "card",
+    "foreground": "#AAA398",
+    "background": "#1A1917",
+    "ratio": 7.028,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "input边线",
+    "surface": "card",
+    "foreground": "#777168",
+    "background": "#1A1917",
+    "ratio": 3.636,
+    "minimum": 3,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "foreground",
+    "surface": "panel-high",
+    "foreground": "#F2EFE9",
+    "background": "#22201D",
+    "ratio": 14.159,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "muted-foreground",
+    "surface": "panel-high",
+    "foreground": "#A39E94",
+    "background": "#22201D",
+    "ratio": 6.094,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "primary",
+    "surface": "panel-high",
+    "foreground": "#FF6B6F",
+    "background": "#22201D",
+    "ratio": 5.869,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "success",
+    "surface": "panel-high",
+    "foreground": "#83CFA0",
+    "background": "#22201D",
+    "ratio": 8.819,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "warning",
+    "surface": "panel-high",
+    "foreground": "#E4B663",
+    "background": "#22201D",
+    "ratio": 8.643,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "danger",
+    "surface": "panel-high",
+    "foreground": "#E4A0C0",
+    "background": "#22201D",
+    "ratio": 7.806,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "unknown",
+    "surface": "panel-high",
+    "foreground": "#AAA398",
+    "background": "#22201D",
+    "ratio": 6.501,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "input边线",
+    "surface": "panel-high",
+    "foreground": "#777168",
+    "background": "#22201D",
+    "ratio": 3.363,
+    "minimum": 3,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "primary-foreground",
+    "surface": "primary",
+    "foreground": "#16130F",
+    "background": "#FF6B6F",
+    "ratio": 6.687,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "按钮hover文字",
+    "surface": "primary混入foreground 5%",
+    "foreground": "#16130F",
+    "background": "#fe7275",
+    "ratio": 6.946,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "success",
+    "surface": "徽章底色5%",
+    "foreground": "#83CFA0",
+    "background": "#1f221e",
+    "ratio": 8.728,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "warning",
+    "surface": "徽章底色5%",
+    "foreground": "#E4B663",
+    "background": "#24211b",
+    "ratio": 8.537,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "danger",
+    "surface": "徽章底色5%",
+    "foreground": "#E4A0C0",
+    "background": "#24201f",
+    "ratio": 7.752,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "vendor-anthropic",
+    "surface": "panel-high",
+    "foreground": "#DDB69A",
+    "background": "#22201D",
+    "ratio": 8.691,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "vendor-openai",
+    "surface": "panel-high",
+    "foreground": "#C6C0B6",
+    "background": "#22201D",
+    "ratio": 8.989,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "vendor-google",
+    "surface": "panel-high",
+    "foreground": "#A5BDE7",
+    "background": "#22201D",
+    "ratio": 8.537,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "vendor-deepseek",
+    "surface": "panel-high",
+    "foreground": "#B8B1E8",
+    "background": "#22201D",
+    "ratio": 8.119,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "vendor-xai",
+    "surface": "panel-high",
+    "foreground": "#E3DDD4",
+    "background": "#22201D",
+    "ratio": 12.04,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "vendor-zhipu",
+    "surface": "panel-high",
+    "foreground": "#ADC2DE",
+    "background": "#22201D",
+    "ratio": 8.936,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "vendor-moonshot",
+    "surface": "panel-high",
+    "foreground": "#D3BF9F",
+    "background": "#22201D",
+    "ratio": 9.071,
+    "minimum": 4.5,
+    "pass": true
+  },
+  {
+    "theme": "dark",
+    "label": "vendor-bytedance",
+    "surface": "panel-high",
+    "foreground": "#D4B0CC",
+    "background": "#22201D",
+    "ratio": 8.42,
+    "minimum": 4.5,
+    "pass": true
+  }
+]

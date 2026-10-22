@@ -1,0 +1,46 @@
+{
+  "typecheck": "PASS",
+  "build": "PASS",
+  "contrast": {
+    "passed": 74,
+    "failed": 0
+  },
+  "routes": {
+    "mock": 42,
+    "realProduction": 42,
+    "failed": 0
+  },
+  "seo": {
+    "passed": 25,
+    "failed": 0
+  },
+  "api": {
+    "passed": 26,
+    "failed": 0,
+    "skipped": 2,
+    "skips": [
+      "本轮未开启写入 CRUD",
+      "脚本未配置鉴定凭据；浏览器已完成 genuine/fake"
+    ]
+  },
+  "browser": {
+    "taskSpace": 37,
+    "finished": true,
+    "desktopWidth": 1440,
+    "mobileWidth": 390,
+    "mobileScrollWidth": 390,
+    "verify": {
+      "genuine": 100,
+      "fake": 31,
+      "checks": 8
+    }
+  },
+  "sourceScan": {
+    "hardcodedColors": [],
+    "legacyComponentClasses": [],
+    "colorSource": "src/lib/theme-tokens.json"
+  },
+  "limitations": [
+    "管理渠道缺独立列表 API，前端遍历站点详情汇总后分页"
+  ]
+}

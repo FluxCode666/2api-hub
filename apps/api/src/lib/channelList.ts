@@ -83,13 +83,15 @@ export interface ChannelQueryResult {
 
 export async function queryChannels(
   db: Database,
-  params: ChannelQuery & { page: number; pageSize: number; includeInactive?: boolean },
+  params: ChannelQuery & { page: number; pageSize: number; includeInactive?: boolean; includeOffline?: boolean },
   currentUserId?: string | null,
 ): Promise<ChannelQueryResult> {
-  // 榜单/统计默认只含 active；详情查询（includeInactive）对 approved 站点下 invalid/paused 渠道也返回
-  const conditions: SQL[] = params.includeInactive
-    ? [sql`s.status = 'approved'`, sql`c.status IN ('active','paused','invalid')`]
-    : [sql`s.status = 'approved'`, sql`c.status = 'active'`];
+  // 榜单/统计默认只含 approved+active；详情（includeInactive）含 invalid/paused；收藏（includeOffline）含已下线
+  const conditions: SQL[] = params.includeOffline
+    ? []
+    : params.includeInactive
+      ? [sql`s.status = 'approved'`, sql`c.status IN ('active','paused','invalid')`]
+      : [sql`s.status = 'approved'`, sql`c.status = 'active'`];
 
   // 价格/模型连接：带 model 时按目录模型连接，否则按主测模型
   let modelId: number | null = null;

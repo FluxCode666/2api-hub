@@ -2,18 +2,12 @@ import 'server-only';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
+import {themes} from './theme';
 import type { MetaResponse, ModelDetail, SiteDetail } from '@hub/shared';
 
 export const ogSize = { width: 1200, height: 630 };
 
-const colors = {
-  background: '#0b100f',
-  panel: '#111816',
-  line: '#26322d',
-  text: '#edf4ef',
-  muted: '#98aaa0',
-  accent: '#bbf49a',
-};
+const colors = {background:themes.light.background,panel:themes.light.card,line:themes.light.border,text:themes.light.foreground,muted:themes.light['muted-foreground'],accent:themes.light.primary,ink:themes.light['primary-foreground']};
 
 type OgFont = { name: string; data: ArrayBuffer; weight: 400 | 600; style: 'normal' };
 type Metric = { value: string; label: string };
@@ -55,10 +49,10 @@ function ConnectionArt() {
   return <svg width="360" height="360" viewBox="0 0 360 360" fill="none" style={{ position: 'absolute', right: 32, top: 93, opacity: 0.85 }}>
     <circle cx="180" cy="180" r="147" stroke={colors.line} />
     <circle cx="180" cy="180" r="111" stroke={colors.line} />
-    <ellipse cx="180" cy="180" rx="147" ry="52" stroke="#456343" transform="rotate(-34 180 180)" />
+    <ellipse cx="180" cy="180" rx="147" ry="52" stroke={colors.muted} transform="rotate(-34 180 180)" />
     <path d="M65 272L180 180L288 102" stroke={colors.accent} strokeWidth="1.5" />
     <rect x="146" y="146" width="68" height="68" rx="19" fill={colors.accent} />
-    <path d="M165 189V174L179 165V181L195 171V189" stroke="#122013" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M165 189V174L179 165V181L195 171V189" stroke={colors.ink} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
     <circle cx="65" cy="272" r="7" fill={colors.accent} />
     <circle cx="288" cy="102" r="6" fill={colors.accent} />
     <circle cx="271" cy="294" r="4" fill={colors.muted} />

@@ -54,7 +54,7 @@ PORT=3210 HOSTNAME=0.0.0.0 API_INTERNAL_URL=http://127.0.0.1:8711 node apps/web/
 
 ## 设计摘要
 
-完整规范见 `apps/web/DESIGN.md`。Geist 配合中文系统字体回退、墨绿底色和薄荷绿强调；亮色主题采用深绿强调色确保文字对比度。品牌页面使用宽幅两至三行 Hero、AIDA、密铺 Bento、GSAP ScrollTrigger、滚动文本与悬停反馈。Hero 在 SSR 时即完整可见，五组元素仅做 8px 位移、总时长 0.61 秒；减少动态效果时关闭 GSAP、CSS 动画与平滑滚动。
+完整规范见 `apps/web/DESIGN.md`。Geist 配合中文系统字体回退，采用默认亮色的纸白、墨黑、朱红主题，暗色可选。主题已映射为 shadcn token；品牌朱红与酒红失败状态严格区分。品牌页面使用宽幅两至三行 Hero、AIDA、密铺 Bento、GSAP ScrollTrigger、滚动文本与悬停反馈。Hero 在 SSR 时即完整可见，五组元素仅做 8px 位移、总时长 0.61 秒；减少动态效果时关闭 GSAP、CSS 动画与平滑滚动。
 
 数据页优先扫读，数字等宽、状态语义统一。榜单筛选压缩为两行，次级条件折叠；输入防抖 300ms，其余条件即时生效。1440×900 实测表格从约 335px 开始，首屏完整显示 7 行；表头滚动后保持在导航下方 81px。390px 改为渠道卡片。
 
@@ -64,8 +64,8 @@ PORT=3210 HOSTNAME=0.0.0.0 API_INTERNAL_URL=http://127.0.0.1:8711 node apps/web/
 - 部署时设置 `HUB_SITE_URL`（或 `NEXT_PUBLIC_SITE_URL`）为真实公开域名；默认 `https://2api.hub`。canonical 和 sitemap 使用统一 origin，并移除筛选查询，避免重复收录。
 - `/sitemap.xml` 通过公开 API 分页收集所有模型、厂商、已上线站点与渠道。仅收录 active 渠道；不包含私有页面、登录注册、临时对比和失效/暂停渠道。`/robots.txt` 禁止 `/merchant`、`/admin`、`/me`、`/api`、登录注册与跳转路径；认证页和个人中心额外带 noindex。
 - JSON-LD：首页 `WebSite + SearchAction`；模型页对应当前榜单的 `ItemList`；站点页 `Organization`，有有效评价时才附加 `AggregateRating`；指南页 `FAQPage` 与可见问答使用同一份内容。JSON 序列化转义 `<`，防止内容中断 script。
-- 分享图固定路径：`/opengraph-image`、`/models/[slug]/opengraph-image`、`/sites/[slug]/opengraph-image`。三个路由均使用 `ImageResponse` 生成 1200×630 PNG，沿用暗墨绿/薄荷绿设计。本地 Geist 与 Noto Sans SC 字体和许可证位于 `apps/web/public/fonts/og/`，生成过程不依赖外网字体；未知详情回退品牌图。
-- 公共数据使用不读取 Cookie 的 `publicApi`，榜单与探测数据 60 秒、目录 300 秒；首页 ISR 60 秒，厂商目录和鉴定页 300 秒，站点/渠道详情按需静态生成并以 60 秒刷新。带 URL 筛选的页面保留动态渲染，同时复用 Data Cache。私有 `serverApi` 强制 no-store。
+- 分享图固定路径：`/opengraph-image`、`/models/[slug]/opengraph-image`、`/sites/[slug]/opengraph-image`。三个路由均使用 `ImageResponse` 生成 1200×630 PNG，采用纸白底、墨黑字和朱红强调。本地 Geist 与 Noto Sans SC 字体和许可证位于 `apps/web/public/fonts/og/`，生成过程不依赖外网字体；未知详情回退品牌图。
+- 公共数据使用不读取 Cookie 的 `publicApi`，榜单与探测数据 60 秒、目录 300 秒；首页 ISR 60 秒，厂商目录和鉴定页 300 秒，站点/渠道详情因支持独立 URL 分页使用动态渲染，公共资源仍按 60 秒缓存。带 URL 筛选的页面保留动态渲染，同时复用 Data Cache。私有 `serverApi` 强制 no-store。
 - 收藏通过客户端共享请求读取，公共缓存不含当前用户收藏；`/me` 保留私有初值。通过同源 API 修改公开资料或评价会立即失效公共标签、公开布局和 sitemap。Next 的 API rewrite 位于 fallback，确保写入先经过 Route Handler 的失效逻辑。
 - 验证脚本：`node apps/web/scripts/check-seo.mjs`，25 项检查在开发和生产模式均通过，覆盖独立摘要、结构化数据、sitemap/robots 和三类 PNG。生产模式已确认首页/目录缓存 HIT，站点与渠道首次 MISS、再次 HIT；结果为 `artifacts/seo-checks.json`、`isr-production-checks.json`，分享图预览为 `og-home.png`、`og-model.png`、`og-site.png`。
 - 生产模式及最终 standalone 下已验证评价保存与删除都会让站点页首次请求 MISS，并立即反映变化，下一次请求恢复 HIT；测试评价已清理。最终证据为 `artifacts/standalone-cache-invalidation.json` 与 `.md`。
@@ -103,10 +103,13 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 | 管理厂商仅返回公开摘要，缺官网/简介/排序 | 编辑时无法完整回显已有资料 | 编排者批准 AdminVendor；前端/Mock 已接入，真实完整回读、部分更新保留和显式 null 清空均通过 |
 | 原始 SQL 的 created_at 实际为字符串 | `/sites` 500 | 后端已修复并真实复测 200 |
 | probe 的外部 undici Agent 与 Node 内置 fetch 不兼容 | 上游直连正常，API 的连接测试/鉴定仍报 network | 检测负责人已统一 undici fetch/Agent；真实连接成功、公开鉴定 100/genuine 已通过 |
+| 新增公开 `/channels/:id/runs` 初期查询失败 | 渠道详情日志无法服务端分页 | 后端已修；分页、只看失败、中文错误分类、越界空页与 total 上限均已真实复测通过 |
+| 收藏跨页 rank 沿用榜单排名 | 收藏列表序号不连续 | 后端改为按收藏最终返回顺序编号，跨页连续性已复测通过 |
+| 收藏越界空页生成 SQL `IN ()` | `/me/favorites?page=2&pageSize=100` 返回 500 | Kimi 已修；page=2、page=9999 均返回空 items，pageSize=101 截断为 100，真实回归通过 |
 
 `GET /me/reviews` 与 `DELETE /me/reviews/:id` 已获批准，`MyReview` 已进入共享契约，前端与 Mock 均已接入；真实创建、同站更新、分页、越权拒绝、本人删除及重复删除 404 均已通过。测试收藏与评价已清理，因无删除用户接口保留一个无业务数据的测试账号。
 
-真实公开/用户接口最近完整检查为 25 通过、0 失败、0 跳过，包含 `stableOnly=false` 和实际公开鉴定。原管理定向复测 30 项通过、0 项失败；后续两项倍率规则也已通过，修改及恢复共四次 PATCH 均未新建任务。管理检查包含独立目录/公告 CRUD、用户角色/封禁恢复、反馈、评分保存恢复、审计与检测任务排队 202。测试权重已恢复；原独立草稿站点 #20 / 渠道 #40 等随后端集成测试的种子恢复清理。
+分页改造后的真实公开/用户接口只读检查为 26 通过、0 失败、2 跳过；跳过本轮未开启的用户写入 CRUD 与脚本未配置鉴定凭据，浏览器另已完成 genuine/fake 两次真实鉴定。包含 `stableOnly=false`、收藏/通知/公开探测记录的服务端分页与边界。原管理定向复测 30 项通过、0 项失败；后续两项倍率规则也已通过，修改及恢复共四次 PATCH 均未新建任务。管理检查包含独立目录/公告 CRUD、用户角色/封禁恢复、反馈、评分保存恢复、审计与检测任务排队 202。测试权重已恢复；原独立草稿站点 #20 / 渠道 #40 等随后端集成测试的种子恢复清理。
 
 真实成功链使用独立站点 #15 / 渠道 #35：连接 200 → 修改 Key 清空连接记录 → 未重测提交 400 且仍为草稿 → 重测 200 → 发现并映射 18 个模型 → 正常保留单一主测模型 → 提交后状态 pending。入驻任务 #1 已真实完成，报告 #81 为 100/genuine、八项检查。浏览器审核通过后站点进入公开目录/榜单，启用每 60 秒探测；首条 schedule 日志 #34600 在审核后 54.6 秒出现，后续状态条样本持续增长。浏览器再次手动发起任务 #60，自动轮询至 done 并刷新八项报告。资源 #15/#35 当前保留上线以供复查；前期链路证据在 `artifacts/admin-success-chain-results.json`，终态证据在 `artifacts/final/success-chain.json`、`api-regressions.json`、`browser-task.json`。
 
@@ -135,8 +138,8 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 
 ## API 第二轮修复配合（2026-10-22）
 
-- 所有 API Key 输入（站长新建/编辑、管理员编辑、公开鉴定）统一最小长度 8、最大 500。原生表单错误与提交前校验均使用「API Key 长度至少 8 位」；编辑留空仍表示保留原 Key。
-- 客户端新增 `apiWithHeaders`，保留响应资源与 Headers；原 `api` 调用方式兼容。站长和管理渠道保存识别 `X-Hub-Notice: rate_limited:*`，行内提示「配置已保存，但今日自动检测额度已用完，本次未重新检测。」；不将保存成功误报为失败。
+- 所有 API Key 输入（站长新建/编辑、管理员编辑、公开鉴定）统一最小长度 8、最大 500。RHF/Zod 表单错误与提交前校验均使用「API Key 长度至少 8 位」；编辑留空仍表示保留原 Key。
+- 客户端新增 `apiWithHeaders`，保留响应资源与 Headers；原 `api` 调用方式兼容。站长和管理渠道保存识别 `X-Hub-Notice: rate_limited:*`，Sonner 警告提示「配置已保存，但今日自动检测额度已用完，本次未重新检测。」；不将保存成功误报为失败。
 - Next 同源 Route Handler 原已保留业务响应头，真实浏览器确认 `X-Hub-Notice` 经过代理后可读。验收中发现后端 raw 中文头值会导致 Node `ERR_INVALID_CHAR`，已交 Kimi 改为 ASCII `rate_limited:merchant_daily_limit`；前端按前缀映射固定中文。
 - 独立测试站点 #66 / 渠道 #130，手动任务 #86/#87/#88 完成并耗尽当日额度。修改 Key 仍返回 200，浏览器真实显示额度提示、无运行错误，任务仍仅为三条手动任务和一条入驻任务，活动任务为零。四类表单的短 Key 在浏览器均被拦截，不发送写请求；8 位边界与编辑留空允许，管理员普通保存 200 且不误显示额度提示。验收后删除空草稿 #67，下架测试站点 #66 并保持定时探测关闭；原 #15/#35 未改动。本轮 `typecheck` 和真实 API 生产 `build` 均通过，构建后恢复 3210 的真实模式开发服务。证据和截图在 `apps/web/artifacts/key-notice/`，Ego TaskSpace 32 已关闭。
 
@@ -154,3 +157,17 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 - Mock 仅供开发演示，不提供持久化；其中评分、历史和报告为 fixture。
 - 移动端对比表和后台密集表格在自身容器内横向滚动。
 - Next 流式响应的部分 403/404 页面可能以 HTTP 200 返回，但内容显示对应状态；API 保持实际 401/403/404。
+
+## 纸白主题、shadcn 与统一分页（2026-10-22）
+
+- `shadcn@latest` 初始化为 radix-nova / Tailwind v4，组件目录 `src/components/ui/`，图标统一 Phosphor。旧 `ui.tsx` 改为领域组合 `page-kit.tsx`。Button、Input、Textarea、Label、Checkbox、Switch、Select、Command/Popover、Tabs/ToggleGroup、Table、Badge、Card、Alert、Dialog/AlertDialog、Sheet、Collapsible、DropdownMenu、Tooltip/HoverCard、Sonner、Sidebar、Breadcrumb、Accordion、Skeleton、Separator、Avatar、ScrollArea、Pagination、Form 已统一；表单用 react-hook-form + zod。图表/探测状态条保留轻量领域实现。
+- 唯一色板 `src/lib/theme-tokens.json`，CSS、OG、favicon 同源。亮色：纸白 `#F6F4EF`、白面板 `#FFFFFF`、墨黑 `#16130F`、朱红 `#C4313B`；暗色：`#121110` / `#1A1917` / `#F2EFE9` / `#FF6B6F`。状态成功 `#246B45` / `#83CFA0`，警告 `#875500` / `#E4B663`，失败 `#7C2948` / `#E4A0C0`，未知 `#6D675F` / `#AAA398`。朱红仅品牌和交互；失败徽章有图标/文字及虚线边框，失败状态格有斜纹。
+- 默认 SSR 亮色；next-themes `defaultTheme=light`、`enableSystem=false`、`attribute=class`。head 内联脚本在内容绘制前恢复本域 `hub-theme`，同时更新 theme-color；浏览器首帧记录验证默认亮色和保存暗色均直接显示正确背景。
+- `DataPagination` 用真实 a 链接显示总数、20/50/100、页码与省略号；390px 为上一页 / 第 x/y 页 / 下一页。服务端分页覆盖榜单、模型/厂商详情榜单、站点目录、站点评价、公开探测记录、个人收藏/评价/通知、站长探测日志、管理员站点/审核/用户/日志/任务/反馈/评价/审计/模型。数组分页覆盖模型/厂商目录、站点渠道、渠道模型与历史报告、站长我的站点/渠道/告警与入驻列表、管理厂商/公告；固定 Top3 与对比免分页。
+- 渠道走势图继续请求 history；日志改为 `/channels/:id/runs`，使用 runsPage/runsPageSize 与只看失败筛选。站点评价使用 reviewsPage，站点渠道使用 channelsPage；切页不会覆盖另一个列表。筛选改变重置当前页，评价在后续页保存时回到评价第一页。
+- 管理渠道无独立列表 API，当前完整遍历站点详情汇总再分页，数据量较大时会有额外请求；搜索条件作用于所属站点。其余已有 Paginated 接口均使用真实服务端分页。
+- 已删除 globals.css 中旧通用组件类，源码硬编码颜色扫描为零（中央 token JSON 除外）。保留品牌布局与 GSAP；手机筛选区溢出、Tabs 滚动条和生产详情页静态声明冲突已修正。
+- 对比度脚本 `node apps/web/scripts/check-contrast.mjs --save`：74/74 通过，最低文字 4.62:1、控件边界 3.26:1。完整主题和组件约定见 DESIGN.md。
+- 最终 `typecheck`、真实 API `build` 均通过；生产模式路由 42/42、SEO 25/25；Mock 路由 42/42。源码硬编码颜色（中央色板除外）及旧通用类扫描均为零。结果、构建日志与截图统一位于 `apps/web/artifacts/theme-paper/`。
+- ego-browser TaskSpace 37 完成双主题桌面检查：首页 Hero/Top3、榜单第 2 页与失败状态、抖动渠道、genuine/fake 鉴定、入驻向导、站长渠道、管理审核及日志分页。另检查 390px 首页、榜单和分页，以及三张 1200×630 OG 图；均已目视检查。移动文档宽度为 390px，分页每页条数切换与筛选均回到第 1 页，公开探测日志支持 runsPage=2。亮暗首帧及 theme-color 正确，证据 `theme-first-frame.json`、`pagination-interactions.json`。
+- 本轮公开鉴定通过真实 API 获得 genuine=100、fake=31，八项检查完整显示；短 Key 被前端拦截，完成后 Key 清空。失效渠道 #31 保留状态横幅、只读历史与 noindex。朱红品牌操作与酒红失败徽章、斜纹状态格可清楚区分，延迟曲线使用中性色。

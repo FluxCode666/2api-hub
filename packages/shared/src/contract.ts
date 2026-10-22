@@ -404,6 +404,11 @@ export interface Notification {
   createdAt: string;
 }
 
+/** GET /me/notifications：分页 + 未读数 */
+export interface NotificationList extends Paginated<Notification> {
+  unreadCount: number;
+}
+
 // ---------- merchant ----------
 export interface SiteInput {
   name: string;
@@ -561,6 +566,11 @@ export interface AdminSite extends MerchantSite {
 export interface AdminSiteDetail extends AdminSite {
   channels: MerchantChannel[];
   reports: AuthenticityReport[];
+}
+
+/** GET /admin/channels 返回 Paginated<AdminChannel> */
+export interface AdminChannel extends MerchantChannel {
+  site: { id: number; slug: string; name: string; status: SiteStatus };
 }
 
 export interface SiteReviewAction {

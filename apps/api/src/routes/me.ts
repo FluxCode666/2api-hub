@@ -1,35 +1,47 @@
 /*
- * 用户接口（SPEC §7.3 + 契约增量：/me/reviews、DELETE /me/reviews/:id）
+ * 用户接口（SPEC §7.3）：favorites/notifications 分页；/me/reviews 契约增量。
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { and, count, desc, eq, sql } from 'drizzle-orm';
 import { favorites, notifications, reviews, sites } from '@hub/db';
 import type {
-  ChannelListItem, MyReview, Notification, Paginated, Review, ReviewInput,
+  ChannelListItem, MyReview, NotificationList, Paginated, Review, ReviewInput,
 } from '@hub/shared';
 import { notFound } from '../lib/errors';
 import { queryChannels } from '../lib/channelList';
 
 const pageQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(20).transform((v) => Math.min(Math.max(v, 1), 100)),
 });
 
 export async function meRoutes(app: FastifyInstance) {
   const db = app.db;
 
-  // ---------- 收藏 ----------
-  app.get('/api/v1/me/favorites', async (req): Promise<ChannelListItem[]> => {
+  // ---------- 收藏（分页；已下线渠道也返回，status 如实） ----------
+  app.get('/api/v1/me/favorites', async (req): Promise<Paginated<ChannelListItem>> => {
     const user = await app.requireAuth(req);
+    const q = pageQuery.parse(req.query);
+    // 先分页查收藏（按收藏时间倒序），再批量取渠道
+    const total = (await db.select({ c: count() }).from(favorites).where(eq(favorites.userId, user.id)))[0]?.c ?? 0;
+    if (total === 0) return { items: [], total: 0, page: q.page, pageSize: q.pageSize };
     const rows = await db.select({ channelId: favorites.channelId }).from(favorites)
-      .where(eq(favorites.userId, user.id)).orderBy(desc(favorites.createdAt));
-    if (rows.length === 0) return [];
+      .where(eq(favorites.userId, user.id))
+      .orderBy(desc(favorites.createdAt))
+      .limit(q.pageSize).offset((q.page - 1) * q.pageSize);
     const ids = rows.map((r) => r.channelId);
-    const { items } = await queryChannels(db, { ids, page: 1, pageSize: 100, sort: 'updated', order: 'desc' }, user.id);
-    // 按收藏顺序返回
+    // page 越界时 ids 为空：直接返回空页（不调用 queryChannels，避免空 IN 子句）
+    if (ids.length === 0) return { items: [], total, page: q.page, pageSize: q.pageSize };
+    // includeOffline：已下线/暂停/失效的收藏也返回
+    const { items } = await queryChannels(db, { ids, page: 1, pageSize: 100, sort: 'updated', order: 'desc', includeOffline: true }, user.id);
     const map = new Map(items.map((it) => [it.id, it]));
-    return ids.map((id) => map.get(id)).filter((x): x is ChannelListItem => x !== undefined);
+    // 按收藏顺序（时间倒序）重排，并重赋 rank = (page-1)*pageSize + index + 1
+    const ordered = ids.map((id) => map.get(id)).filter((x): x is ChannelListItem => x !== undefined);
+    return {
+      items: ordered.map((item, i) => ({ ...item, rank: (q.page - 1) * q.pageSize + i + 1 })),
+      total, page: q.page, pageSize: q.pageSize,
+    };
   });
 
   app.post('/api/v1/me/favorites/:channelId', async (req, reply) => {
@@ -127,21 +139,37 @@ export async function meRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // ---------- 通知 ----------
-  app.get('/api/v1/me/notifications', async (req): Promise<Notification[]> => {
+  // ---------- 通知（分页 + unreadCount + unread 筛选） ----------
+  app.get('/api/v1/me/notifications', async (req): Promise<NotificationList> => {
     const user = await app.requireAuth(req);
+    const q = pageQuery.extend({
+      unread: z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1').optional(),
+    }).parse(req.query);
+    const baseWhere = eq(notifications.userId, user.id);
+    const where = q.unread ? and(baseWhere, sql`${notifications.readAt} IS NULL`) : baseWhere;
+    const [total, unreadCount] = await Promise.all([
+      db.select({ c: count() }).from(notifications).where(where),
+      db.select({ c: count() }).from(notifications).where(and(baseWhere, sql`${notifications.readAt} IS NULL`)),
+    ]);
     const rows = await db.select().from(notifications)
-      .where(eq(notifications.userId, user.id))
-      .orderBy(desc(notifications.createdAt)).limit(100);
-    return rows.map((n) => ({
-      id: n.id,
-      type: n.type,
-      title: n.title,
-      body: n.body,
-      link: n.link,
-      readAt: n.readAt?.toISOString() ?? null,
-      createdAt: n.createdAt.toISOString(),
-    }));
+      .where(where)
+      .orderBy(desc(notifications.createdAt))
+      .limit(q.pageSize).offset((q.page - 1) * q.pageSize);
+    return {
+      items: rows.map((n) => ({
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        body: n.body,
+        link: n.link,
+        readAt: n.readAt?.toISOString() ?? null,
+        createdAt: n.createdAt.toISOString(),
+      })),
+      total: total[0]?.c ?? 0,
+      page: q.page,
+      pageSize: q.pageSize,
+      unreadCount: unreadCount[0]?.c ?? 0,
+    };
   });
 
   app.post('/api/v1/me/notifications/read', async (req) => {

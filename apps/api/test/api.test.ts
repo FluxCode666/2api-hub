@@ -234,7 +234,7 @@ describe('入驻→提交→审核流程', () => {
     expect(pub.json().total).toBe(1);
 
     const notif = await app.inject({ method: 'GET', url: '/api/v1/me/notifications', headers: { cookie } });
-    expect(notif.json().some((n: { type: string }) => n.type === 'site_approved')).toBe(true);
+    expect(notif.json().items.some((n: { type: string }) => n.type === 'site_approved')).toBe(true);
 
     const rej = await app.inject({
       method: 'POST', url: `/api/v1/admin/sites/${siteId}/review`, headers: { cookie: adminCookie },
@@ -425,6 +425,135 @@ describe('失效渠道可读（编排者决策）', () => {
     expect(go.statusCode).toBe(302);
 
     await db.execute(sql`UPDATE channels SET status = 'active' WHERE id = ${ctx.dear.id}`);
+  });
+});
+
+describe('分页边界行为', () => {
+  it('pageSize > 100 被截断为 100', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/v1/channels?pageSize=999' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().pageSize).toBeLessThanOrEqual(100);
+  });
+
+  it('page 越界返回空 items（不报错）', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/v1/channels?page=9999' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().items).toEqual([]);
+    expect(res.json().total).toBeGreaterThan(0); // total 是筛选后总数
+  });
+
+  it('total 是筛选后的总数', async () => {
+    const all = await app.inject({ method: 'GET', url: '/api/v1/channels' });
+    const filtered = await app.inject({ method: 'GET', url: '/api/v1/channels?q=低价' });
+    expect(filtered.json().total).toBeLessThan(all.json().total);
+    expect(filtered.json().total).toBe(filtered.json().items.length);
+  });
+});
+
+describe('favorites 分页（含下线渠道）', () => {
+  it('收藏分页返回 Paginated，下线渠道也返回', async () => {
+    const cookie = await login('test-other@t.dev');
+    // 先收藏两个渠道
+    await app.inject({ method: 'POST', url: `/api/v1/me/favorites/${ctx.cheap.id}`, headers: { cookie } });
+    await app.inject({ method: 'POST', url: `/api/v1/me/favorites/${ctx.dear.id}`, headers: { cookie } });
+
+    // 正常分页
+    const res = await app.inject({ method: 'GET', url: '/api/v1/me/favorites?page=1&pageSize=10', headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.total).toBe(2);
+    expect(body.items.length).toBe(2);
+    expect(body.page).toBe(1);
+    expect(body.pageSize).toBe(10);
+    expect(body.items[0].isFavorite).toBe(true);
+
+    // 下线渠道（站点 suspended）也返回
+    await db.execute(sql`UPDATE sites SET status = 'suspended' WHERE id = ${ctx.site.id}`);
+    const res2 = await app.inject({ method: 'GET', url: '/api/v1/me/favorites', headers: { cookie } });
+    expect(res2.json().total).toBe(2); // 不凭空消失
+    // 恢复
+    await db.execute(sql`UPDATE sites SET status = 'approved' WHERE id = ${ctx.site.id}`);
+
+    // 清理收藏
+    await app.inject({ method: 'DELETE', url: `/api/v1/me/favorites/${ctx.cheap.id}`, headers: { cookie } });
+    await app.inject({ method: 'DELETE', url: `/api/v1/me/favorites/${ctx.dear.id}`, headers: { cookie } });
+  });
+
+  it('跨页 rank 连续（按收藏时间倒序赋值）', async () => {
+    const cookie = await login('test-other@t.dev');
+    // 收藏两个渠道（顺序：先 cheap 后 dear， dear 更新）
+    await app.inject({ method: 'POST', url: `/api/v1/me/favorites/${ctx.cheap.id}`, headers: { cookie } });
+    await new Promise((r) => setTimeout(r, 50)); // 保证 createdAt 不同
+    await app.inject({ method: 'POST', url: `/api/v1/me/favorites/${ctx.dear.id}`, headers: { cookie } });
+
+    // pageSize=1：第 1 页 rank=1，第 2 页 rank=2
+    const p1 = await app.inject({ method: 'GET', url: '/api/v1/me/favorites?page=1&pageSize=1', headers: { cookie } });
+    const p2 = await app.inject({ method: 'GET', url: '/api/v1/me/favorites?page=2&pageSize=1', headers: { cookie } });
+    expect(p1.json().items[0].rank).toBe(1);
+    expect(p2.json().items[0].rank).toBe(2);
+    // 收藏时间倒序：dear（后收藏）在前
+    expect(p1.json().items[0].id).toBe(ctx.dear.id);
+    expect(p2.json().items[0].id).toBe(ctx.cheap.id);
+
+    // 清理
+    await app.inject({ method: 'DELETE', url: `/api/v1/me/favorites/${ctx.cheap.id}`, headers: { cookie } });
+    await app.inject({ method: 'DELETE', url: `/api/v1/me/favorites/${ctx.dear.id}`, headers: { cookie } });
+  });
+});
+
+describe('notifications 分页', () => {
+  it('返回 NotificationList（unreadCount + unread 筛选）', async () => {
+    const cookie = await login('test-other@t.dev');
+    // 造两条通知（一已读一未读）
+    await db.execute(sql`INSERT INTO notifications (user_id, type, title) VALUES (${ctx.other.id}, 'test', '未读通知')`);
+    await db.execute(sql`INSERT INTO notifications (user_id, type, title, read_at) VALUES (${ctx.other.id}, 'test', '已读通知', now())`);
+
+    const res = await app.inject({ method: 'GET', url: '/api/v1/me/notifications?page=1&pageSize=10', headers: { cookie } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body).toHaveProperty('unreadCount');
+    expect(body).toHaveProperty('items');
+    expect(body.unreadCount).toBeGreaterThanOrEqual(1);
+
+    // unread=true 只看未读
+    const unread = await app.inject({ method: 'GET', url: '/api/v1/me/notifications?unread=true', headers: { cookie } });
+    expect(unread.json().items.every((n: { readAt: string | null }) => n.readAt === null)).toBe(true);
+
+    // 清理
+    await db.execute(sql`DELETE FROM notifications WHERE user_id = ${ctx.other.id} AND type = 'test'`);
+  });
+});
+
+describe('公开 runs 接口（GET /channels/:id/runs）', () => {
+  it('分页返回探测记录，errorMessage 为中文分类', async () => {
+    // 先造几条探测记录（含一条失败）
+    await db.execute(sql`INSERT INTO probe_runs (channel_id, model, protocol, kind, trigger, success, http_status, error_code, error_message, latency_ms, created_at)
+      VALUES (${ctx.cheap.id}, 'claude-opus-5-5', 'anthropic', 'availability', 'schedule', true, 200, null, null, 1200, now()),
+             (${ctx.cheap.id}, 'claude-opus-5-5', 'anthropic', 'availability', 'schedule', false, 503, 'http_5xx', '上游错误 sk-test-secret-key-0001 详细', null, now())`);
+
+    const res = await app.inject({ method: 'GET', url: `/api/v1/channels/${ctx.cheap.id}/runs?page=1&pageSize=10` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.items.length).toBeGreaterThanOrEqual(2);
+    expect(body.total).toBeGreaterThanOrEqual(2);
+    // errorMessage 是中文分类，不含原始 Key
+    const failed = body.items.find((r: { success: boolean }) => !r.success);
+    expect(failed.errorMessage).not.toContain('sk-test-secret-key-0001');
+    expect(failed.errorMessage).toContain('错误');
+
+    // success 筛选
+    const okOnly = await app.inject({ method: 'GET', url: `/api/v1/channels/${ctx.cheap.id}/runs?success=true` });
+    expect(okOnly.json().items.every((r: { success: boolean }) => r.success)).toBe(true);
+
+    // 清理
+    await db.execute(sql`DELETE FROM probe_runs WHERE channel_id = ${ctx.cheap.id}`);
+  });
+
+  it('未上线站点的渠道返回 404', async () => {
+    await db.execute(sql`UPDATE sites SET status = 'suspended' WHERE id = ${ctx.site.id}`);
+    const res = await app.inject({ method: 'GET', url: `/api/v1/channels/${ctx.cheap.id}/runs` });
+    expect(res.statusCode).toBe(404);
+    await db.execute(sql`UPDATE sites SET status = 'approved' WHERE id = ${ctx.site.id}`);
   });
 });
 

@@ -22,7 +22,7 @@ import { siteListQuery, reviewDistribution } from '../lib/sites';
 
 const pageQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(20).transform((v) => Math.min(Math.max(v, 1), 100)),
 });
 
 // /verify 并发控制（进程内）

@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 // 运行时只校验 @hub/shared 契约的必要字段，不输出凭据或完整响应。
 /** @typedef {import('@hub/shared').MyReview} MyReview */
 /** @typedef {import('@hub/shared').ChannelListItem} ChannelListItem */
+/** @typedef {import('@hub/shared').NotificationList} NotificationList */
+/** @typedef {import('@hub/shared').ProbeRun} ProbeRun */
 const apiOrigin = (process.env.HUB_API_URL ?? process.env.API_INTERNAL_URL ?? 'http://127.0.0.1:8711').replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
 const webOrigin = process.env.HUB_WEB_URL?.replace(/\/$/, '');
 const writes = process.env.HUB_INTEGRATION_WRITES === '1';
@@ -31,7 +33,7 @@ function shape(value, fields, label = 'response') {
 }
 function page(value, validate) {
   shape(value, { items: 'array', total: 'number', page: 'number', pageSize: 'number' });
-  assert(Number.isInteger(value.total) && value.total >= 0 && value.page >= 1 && value.pageSize >= 1, '分页字段无效');
+  assert(Number.isInteger(value.total) && value.total >= 0 && Number.isInteger(value.page) && value.page >= 1 && Number.isInteger(value.pageSize) && value.pageSize >= 1 && value.pageSize <= 100, '分页字段无效');
   assert(value.items.length <= value.pageSize, '返回条数超过 pageSize');
   value.items.forEach(validate);
   return value;
@@ -73,6 +75,20 @@ function myReview(value) {
   assert(!('userId' in value) && !('siteId' in value), '我的评价不应暴露内部关联字段');
 }
 function session(value) { shape(value, { id: 'string', email: 'string', nickname: 'string', avatarUrl: 'string?', role: 'string', createdAt: 'iso' }, 'session'); }
+/** @param {NotificationList} value */
+function notificationPage(value) {
+  page(value, item => shape(item, { id: 'number', type: 'string', title: 'string', body: 'string?', link: 'string?', readAt: 'iso?', createdAt: 'iso' }, 'notification'));
+  shape(value, { unreadCount: 'number' }, 'notifications');
+  assert(Number.isInteger(value.unreadCount) && value.unreadCount >= 0 && value.unreadCount <= value.total, '通知未读数无效');
+  assert(value.items.filter(item => !item.readAt).length <= value.unreadCount, '未读数小于当前页未读通知数');
+  return value;
+}
+/** @param {ProbeRun} value */
+function probeRun(value) {
+  shape(value, { id: 'number', channelId: 'number', model: 'string', protocol: 'string', kind: 'string', trigger: 'string', success: 'boolean', httpStatus: 'number?', errorCode: 'string?', errorMessage: 'string?', latencyMs: 'number?', ttftMs: 'number?', outputTokens: 'number?', tokensPerSec: 'number?', createdAt: 'iso' }, 'probeRun');
+  assert(protocolValues.includes(value.protocol), '日志协议无效');
+  assert(['availability', 'authenticity', 'discovery'].includes(value.kind), '日志类型无效');
+}
 function report(value) {
   shape(value, { id: 'number?', channelId: 'number?', model: 'string', protocol: 'string', score: 'number?', verdict: 'string', checks: 'array', durationMs: 'number', trigger: 'string', createdAt: 'iso' }, 'report');
   value.checks.forEach(check => shape(check, { id: 'string', name: 'string', passed: 'boolean?', weight: 'number', detail: 'string' }, 'report.checks'));
@@ -92,6 +108,15 @@ async function request(path, { method = 'GET', body, cookie = '', origin = apiOr
   if (response.status >= 400) shape(data?.error, { code: 'string', message: 'string' }, 'error');
   if (data !== undefined) noSecrets(data);
   return { data, response };
+}
+async function paginationBounds(path, validate, options = {}) {
+  const capped = page((await request(`${path}?pageSize=101`, options)).data, validate);
+  assert.equal(capped.pageSize, 100, 'pageSize 超过 100 时应截断为 100');
+  const outsidePage = Math.floor(capped.total / capped.pageSize) + 2;
+  const outside = page((await request(`${path}?page=${outsidePage}&pageSize=100`, options)).data, validate);
+  assert.equal(outside.page, outsidePage, '越界页码应保留');
+  assert.equal(outside.items.length, 0, '越界页应返回空列表');
+  assert.equal(outside.total, capped.total, '越界页应保留总数');
 }
 async function check(label, execute) {
   const start = Date.now();
@@ -134,11 +159,13 @@ if (!healthy) { await finish(true); } else {
   });
   await check('公开站点列表分页与契约', async () => {
     const { data } = await request('/sites?pageSize=100'); page(data, site); sites = data.items;
+    await paginationBounds('/sites', site);
   });
   await check('渠道契约、倍率公式与连续排名', async () => {
     const { data } = await request('/channels?pageSize=100'); page(data, channel); channels = data.items;
     channels.forEach((item, index) => assert.equal(item.rank, index + 1));
     if (data.total > 2) { const second = (await request('/channels?page=2&pageSize=2')).data; assert.equal(second.items[0].rank, 3); }
+    await paginationBounds('/channels', channel);
   });
   // 目录失败时仍独立验证站点详情与个人写入，目录错误会保留为 FAIL。
   const availableSites = sites.length ? sites : [...new Map(channels.map(item => [item.site.id, item.site])).values()];
@@ -146,6 +173,7 @@ if (!healthy) { await finish(true); } else {
     const slug = encodeURIComponent(availableSites[0].slug);
     const { data: detail } = await request(`/sites/${slug}`); site(detail); shape(detail, { contact: 'object', paymentMethods: 'array', rechargeRatio: 'number', approvedAt: 'iso?', channels: 'array', ratingSummary: 'object' }); detail.channels.forEach(channel); shape(detail.ratingSummary, { avg: 'number?', count: 'number', distribution: 'object' }); shape(detail.ratingSummary.distribution, { '1': 'number', '2': 'number', '3': 'number', '4': 'number', '5': 'number' });
     page((await request(`/sites/${slug}/reviews?pageSize=2`)).data, review);
+    await paginationBounds(`/sites/${slug}/reviews`, review);
     return sites.length ? '' : '使用渠道关联站点；站点列表错误单独保留';
   }); else skip('公开站点详情与评价分页', '无公开站点或渠道，需 seed/审核站点后补齐');
   await check('stableOnly=true 稳定性筛选', async () => { const { data } = await request('/channels?stableOnly=true&pageSize=100'); page(data, channel); assert(data.items.every(item => item.stats.uptime24h >= 0.95 && item.stats.samples24h >= 12)); });
@@ -163,6 +191,17 @@ if (!healthy) { await finish(true); } else {
       if (query.has('minUptime')) assert(data.items.every(item => item.stats.uptime24h !== null && item.stats.uptime24h >= Number(query.get('minUptime')))); if (query.has('minTrust')) assert(data.items.every(item => item.stats.trustScore !== null && item.stats.trustScore >= Number(query.get('minTrust'))));
     });
     for (const [window, bucketSec] of [['1h', 60], ['24h', 1800], ['7d', 10800], ['30d', 43200]]) await check(`渠道 history ${window}`, async () => { const { data } = await request(`/channels/${id}/history?window=${window}`); shape(data, { window: 'string', bucketSec: 'number', points: 'array', recentRuns: 'array' }); assert.equal(data.window, window); assert.equal(data.bucketSec, bucketSec); data.points.forEach(point => shape(point, { t: 'iso', total: 'number', ok: 'number', latencyP50: 'number?', ttftAvg: 'number?' })); data.recentRuns.forEach(run => shape(run, { id: 'number', channelId: 'number', model: 'string', protocol: 'string', kind: 'string', trigger: 'string', success: 'boolean', httpStatus: 'number?', errorCode: 'string?', errorMessage: 'string?', latencyMs: 'number?', ttftMs: 'number?', outputTokens: 'number?', tokensPerSec: 'number?', createdAt: 'iso' })); });
+    await check('公开探测日志服务端分页、失败筛选与标准错误', async () => {
+      const first = page((await request(`/channels/${id}/runs?page=1&pageSize=20`)).data, probeRun); assert.equal(first.page, 1); assert.equal(first.pageSize, 20); assert(first.items.every(run => run.channelId === id));
+      assert(first.total <= 10000, '公开日志 total 不应超过 10000');
+      if (first.total > 20) { const second = page((await request(`/channels/${id}/runs?page=2&pageSize=20`)).data, probeRun); assert.equal(second.page, 2); assert(second.items.every(run => !first.items.some(previous => previous.id === run.id))); }
+      const passed = page((await request(`/channels/${id}/runs?success=true&pageSize=20`)).data, probeRun); assert(passed.items.every(run => run.success));
+      const failed = page((await request(`/channels/${id}/runs?success=false&pageSize=20`)).data, probeRun); assert(failed.items.every(run => !run.success)); assert(passed.total <= 10000 && failed.total <= 10000); assert.equal(Math.min(10000, passed.total + failed.total), first.total);
+      const availability = page((await request(`/channels/${id}/runs?kind=availability&pageSize=20`)).data, probeRun); assert(availability.items.every(run => run.kind === 'availability'));
+      await paginationBounds(`/channels/${id}/runs`, probeRun);
+      for (const query of ['page=0', 'pageSize=0', 'kind=invalid', 'success=invalid']) await request(`/channels/${id}/runs?${query}`, { status: 400 });
+      await request('/channels/2147483647/runs', { status: 404 });
+    });
     await check('按 ids 批量对比', async () => { const ids = channels.slice(0, 2).map(item => item.id); const { data } = await request(`/channels?ids=${ids.join(',')}&pageSize=4`); page(data, channel); assert(data.items.every(item => ids.includes(item.id))); assert.equal(data.total, ids.length); });
     await check('/go/:channelId 返回 302 与站点地址', async () => { const { response } = await request(`/go/${id}`, { status: 302 }); assert(/^https?:\/\//.test(response.headers.get('location') ?? '')); });
   } else skip('渠道详情/history/对比/go', '无公开渠道，需 seed/审核站点后补齐');
@@ -177,12 +216,31 @@ if (!healthy) { await finish(true); } else {
   await check('游客认证/收藏/个人评价/通知均 401', async () => { for (const path of ['/auth/me', '/me/favorites', '/me/reviews', '/me/notifications']) await request(path, { status: 401 }); await request('/me/reviews/2147483647', { method: 'DELETE', status: 401 }); });
   await check('真实登录 Cookie、会话、用户接口与 admin 403', async () => {
     const { data, response } = await request('/auth/login', { method: 'POST', body: { email: process.env.HUB_INTEGRATION_EMAIL ?? 'user@2api.hub', password: process.env.HUB_INTEGRATION_PASSWORD ?? 'user123456' } }); session(data); controlCookie = cookieFrom(response);
-    session((await request('/auth/me', { cookie: controlCookie })).data); assert(Array.isArray((await request('/me/favorites', { cookie: controlCookie })).data)); page((await request('/me/reviews?page=1&pageSize=2', { cookie: controlCookie })).data, myReview); assert(Array.isArray((await request('/me/notifications', { cookie: controlCookie })).data)); if (data.role !== 'admin') await request('/admin/overview', { cookie: controlCookie, status: 403 });
+    session((await request('/auth/me', { cookie: controlCookie })).data); page((await request('/me/reviews?page=1&pageSize=2', { cookie: controlCookie })).data, myReview); if (data.role !== 'admin') await request('/admin/overview', { cookie: controlCookie, status: 403 });
+    await paginationBounds('/me/reviews', myReview, { cookie: controlCookie });
   });
+  if (controlCookie) {
+    await check('个人收藏服务端分页与跨页连续排名', async () => {
+      const first = page((await request('/me/favorites?page=1&pageSize=2', { cookie: controlCookie })).data, channel);
+      assert.equal(first.page, 1); assert.equal(first.pageSize, 2); assert(first.items.every(item => item.isFavorite));
+      first.items.forEach((item, index) => assert.equal(item.rank, index + 1, '收藏首页排名应按返回顺序连续'));
+      if (first.total > 2) { const second = page((await request('/me/favorites?page=2&pageSize=2', { cookie: controlCookie })).data, channel); assert.equal(second.total, first.total); assert.equal(second.page, 2); assert(second.items.every(item => item.isFavorite && !first.items.some(previous => previous.id === item.id))); second.items.forEach((item, index) => assert.equal(item.rank, first.pageSize + index + 1, '收藏跨页排名应按返回顺序连续')); }
+      await paginationBounds('/me/favorites', channel, { cookie: controlCookie });
+      await request('/me/favorites?page=0', { cookie: controlCookie, status: 400 }); await request('/me/favorites?pageSize=0', { cookie: controlCookie, status: 400 });
+    });
+    await check('站内通知服务端分页、全局未读数与输入校验', async () => {
+      const first = notificationPage((await request('/me/notifications?page=1&pageSize=2', { cookie: controlCookie })).data);
+      assert.equal(first.page, 1); assert.equal(first.pageSize, 2);
+      const second = notificationPage((await request('/me/notifications?page=2&pageSize=2', { cookie: controlCookie })).data);
+      assert.equal(second.page, 2); assert.equal(second.total, first.total); assert.equal(second.unreadCount, first.unreadCount); assert(second.items.every(item => !first.items.some(previous => previous.id === item.id)));
+      await paginationBounds('/me/notifications', item => shape(item, { id: 'number', readAt: 'iso?' }, 'notification'), { cookie: controlCookie });
+      await request('/me/notifications?page=0', { cookie: controlCookie, status: 400 }); await request('/me/notifications?pageSize=0', { cookie: controlCookie, status: 400 });
+    });
+  }
   if (writes && availableSites.length && channels.length) await check('注册→收藏→我的评价分页/更新/越权/删除→清理', async () => {
     const password = randomUUID(); const { data: user, response } = await request('/auth/register', { method: 'POST', body: { email: `web-integration-${Date.now()}@example.test`, password, nickname: '接口联调账号' }, status: [200, 201] }); session(user); const cookie = cookieFrom(response); retainedAccount = true; const created = [];
     try {
-      await request(`/me/favorites/${channels[0].id}`, { method: 'POST', cookie, status: [200, 201] }); assert((await request('/me/favorites', { cookie })).data.some(item => item.id === channels[0].id && item.isFavorite)); assert((await request(`/channels?ids=${channels[0].id}`, { cookie })).data.items[0].isFavorite);
+      await request(`/me/favorites/${channels[0].id}`, { method: 'POST', cookie, status: [200, 201] }); assert(page((await request('/me/favorites', { cookie })).data, channel).items.some(item => item.id === channels[0].id && item.isFavorite)); assert((await request(`/channels?ids=${channels[0].id}`, { cookie })).data.items[0].isFavorite);
       for (const item of availableSites.slice(0, 2)) { const { data } = await request(`/sites/${encodeURIComponent(item.slug)}/reviews`, { method: 'POST', cookie, body: { rating: 4, content: '真实 API 联调评价，脚本结束时自动清理。' }, status: [200, 201] }); if (typeof data?.id === 'number') created.push(data); review(data); }
       const first = page((await request('/me/reviews?page=1&pageSize=1', { cookie })).data, myReview); assert.equal(first.total, created.length); assert.equal(first.items.length, 1);
       if (created.length > 1) { const second = page((await request('/me/reviews?page=2&pageSize=1', { cookie })).data, myReview); assert.notEqual(second.items[0].id, first.items[0].id); }
@@ -197,13 +255,13 @@ if (!healthy) { await finish(true); } else {
       ]);
       assert(cleanup.every(item => item.status === 'fulfilled'), '测试数据清理失败，请检查 API 连通性后清理测试账号的评价/收藏');
       assert.equal((await request('/me/reviews', { cookie })).data.total, 0, '测试评价未完全清理');
-      assert.equal((await request('/me/favorites', { cookie })).data.length, 0, '测试收藏未完全清理');
+      assert.equal(page((await request('/me/favorites', { cookie })).data, channel).total, 0, '测试收藏未完全清理');
       const logout = await request('/auth/logout', { method: 'POST', cookie }); assert(/max-age=0|expires=Thu, 01 Jan 1970/i.test(logout.response.headers.get('set-cookie') ?? ''), '退出未清除会话 Cookie');
     }
     return '测试收藏与评价已清理；无删除用户接口，保留一个无业务数据测试账号';
   }); else skip('用户写入与 MyReview CRUD', writes ? '缺少公开站点或渠道' : '设置 HUB_INTEGRATION_WRITES=1 执行');
   if (webOrigin && controlCookie) await check('Next 同源 API 代理与真实 Cookie', async () => {
-    session((await request('/auth/me', { origin: webOrigin, cookie: controlCookie })).data); page((await request('/me/reviews?pageSize=2', { origin: webOrigin, cookie: controlCookie })).data, myReview);
+    session((await request('/auth/me', { origin: webOrigin, cookie: controlCookie })).data); page((await request('/me/reviews?pageSize=2', { origin: webOrigin, cookie: controlCookie })).data, myReview); page((await request('/me/favorites?pageSize=2', { origin: webOrigin, cookie: controlCookie })).data, channel); notificationPage((await request('/me/notifications?pageSize=2', { origin: webOrigin, cookie: controlCookie })).data);
   }); else skip('Next 真实 API 代理', '设置 HUB_WEB_URL 并将 Web 切换为真实 API 模式后执行');
   if (process.env.HUB_VERIFY_BASE_URL && process.env.HUB_VERIFY_API_KEY && process.env.HUB_VERIFY_MODEL) await check('实际快速鉴定报告契约与 Key 不回传', async () => {
     const { data } = await request('/verify', { method: 'POST', timeout: 70000, body: { baseUrl: process.env.HUB_VERIFY_BASE_URL, apiKey: process.env.HUB_VERIFY_API_KEY, model: process.env.HUB_VERIFY_MODEL, protocol: process.env.HUB_VERIFY_PROTOCOL ?? 'openai_chat' } }); report(data); assert.equal(data.id, null); assert.equal(data.channelId, null); assert(!JSON.stringify(data).includes(process.env.HUB_VERIFY_API_KEY), '报告回传了输入 Key');

@@ -23,7 +23,7 @@ import { enqueueProbeTask } from '../lib/enqueue';
 const idParam = z.object({ id: z.coerce.number().int().positive() });
 const pageQuery = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  pageSize: z.coerce.number().int().min(1).max(1000).default(20).transform((v) => Math.min(Math.max(v, 1), 100)),
 });
 
 async function audit(

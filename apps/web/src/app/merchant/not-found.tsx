@@ -1,2 +1,4 @@
 import Link from 'next/link';
-export default function NotFound() { return <div className="panel stack"><h2>没有找到这个站点或渠道</h2><p className="muted">它可能已被移除，或不属于当前账号。</p><div><Link className="btn btn-primary" href="/merchant/sites">返回我的站点</Link></div></div>; }
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+export default function NotFound() { return <Card><CardHeader><CardTitle>没有找到这个站点或渠道</CardTitle><CardDescription>它可能已被移除，或不属于当前账号。</CardDescription></CardHeader><CardContent><Button asChild><Link href="/merchant/sites">返回我的站点</Link></Button></CardContent></Card>; }

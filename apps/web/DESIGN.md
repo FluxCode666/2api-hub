@@ -1,36 +1,72 @@
 # 2API Hub 设计系统
 
-品牌概念：清晰的连接。深墨绿的精密数据界面，以薄荷绿作为可操作和可信的视觉线索。全站简体中文，不使用 emoji。
+品牌概念：清晰的连接。纸白、墨黑、朱红的评测杂志与权威榜单；默认亮色，暗色可选。全站简体中文，无 emoji。此轮保留布局、Geist 字体与 GSAP 动效。
 
-## 随机化定稿
-gpt-taste 模拟 Python seed=2210：Cinematic Center Hero；Geist 字体；Infinite Marquee、Horizontal Accordions、Inline Typography Images；GSAP Scroll Pinning 与 Scrubbing Text Reveals。
+## 既有设计定稿
 
-## 视觉变量
-- 背景 `#0b100f`，面板 `#111816`，高一层面板 `#17201d`；边线 `#26322d`。
-- 正文 `#edf4ef`，次级文字 `#98aaa0`；主色 `#bbf49a`，强调文字深色 `#122013`。
-- 成功 `#9be6b0`、警告 `#efc47c`、失败 `#f18e91`、未知 `#85948b`。不能仅凭颜色判断状态，必须有文字/可访问标签。
-- 亮色通过 `[data-theme=light]` 覆盖语义变量，强调色使用深绿 `#36782b` 搭配白色，保证数字、链接与按钮的对比度。所有组件用 CSS 变量，不写固定白底。
-- 字体 Geist，中文回退 PingFang SC / HarmonyOS Sans SC / Noto Sans SC / sans-serif；数据使用 Geist Mono 与 tabular-nums。
-- 圆角：按钮 8px、卡片 14px、区块 20px；边线 1px；阴影弱。
-- 内容最大宽 1320px，桌面边距 48px、移动端 20px。品牌区块纵向 120–160px；数据页面顶部 48px，表格行距紧凑。
+gpt-taste 模拟 Python seed=2210：Cinematic Center Hero；Geist；Infinite Marquee、Horizontal Accordions、Inline Typography Images；Scroll Pinning、Scrubbing Text Reveals。品牌页保持 AIDA 导航→宽幅 Hero→12 列 7+5 / 5+7 密铺 bento→检测叙事→CTA/页脚。Hero max-w-6xl，2–3 行，SSR 完整可见，入场仅 8px 位移，总长 0.61 秒。减少动态效果时关闭动画。
 
-## 公共 CSS 类（根代理提供）
-`.container` `.section` `.page-head` `.eyebrow` `.muted` `.mono` `.panel` `.card` `.card-grid` `.stack` `.row` `.between` `.btn` `.btn-primary` `.btn-small` `.badge` `.badge-good` `.badge-warn` `.badge-bad` `.field` `.input` `.select` `.form-grid` `.notice` `.notice-error` `.table-wrap` `.data-table` `.empty` `.metric-grid` `.metric` `.dashboard` `.sidebar` `.dashboard-main` `.tabs` `.tab` `.tab-active`。
+## 色板与语义
 
-## 共用 TypeScript 接口
-- `@/lib/api/client`: `api<T>(path, options?: RequestInit): Promise<T>`，浏览器请求同源 /api/v1。
-- `@/lib/api/server`: `serverApi<T>(path, options?: RequestInit): Promise<T>`，SSR 透传 cookie；`getSession(): Promise<SessionUser|null>`；`requireSession(admin?: boolean): Promise<SessionUser|null>`（未登录 redirect；admin 不足权限返回 null）。
-- `@/components/ui`: `PageHead({title,description?,eyebrow?,children?})`、`Metric({label,value,detail?})`、`Empty({title,description?})`、`StatusBadge({status})`、`FormatDate({value})`。
-- `@/components/channel-table`: `ChannelTable({items: ChannelListItem[]})`。
-- `@/components/charts`: `UptimeBar({points: SparkPoint[]})`、`Sparkline({points: SparkPoint[]})`、`TrustBadge({score, verdict})`。
-- `@/components/dashboard-shell`: `DashboardShell({kind:'merchant'|'admin',user:SessionUser,children:ReactNode})`。
+唯一色值来源 `src/lib/theme-tokens.json`。`theme.ts` 在服务端生成 CSS 变量；OG/favicons 使用同源 token（Satori 不支持 CSS 变量）。应用中不得硬编码颜色，也不得使用带透明度的 hex；透明效果使用 `color-mix` 或 Tailwind token 透明度。
 
-## 版式与动效
-品牌页面按 AIDA：导航、宽幅 2–3 行 Hero（max-w-6xl）、密铺四块 bento（12列，7+5 / 5+7）、检测方法滚动叙事、CTA、页脚。每块可点击卡片都有轻微位移/内部放大反馈，按钮有边色和 y 位移反馈。Hero 在 SSR 时即完整可见，入场仅做 8px 位移，首页五组元素总时长 0.61 秒；不设置初始透明。GSAP 与 CSS 动画在 prefers-reduced-motion 下禁用；pin 仅桌面。
-数据页面优先扫读：表头小号、数字右对齐、单位始终可见；60格状态条缺样本显示未知，不以成功补齐。移动端榜单用卡片，后台侧栏变横向导航。
+| token | 亮色（默认） | 暗色 |
+| --- | --- | --- |
+| background | #F6F4EF | #121110 |
+| card / popover | #FFFFFF | #1A1917 |
+| secondary / muted / accent | #EFECE5 | #22201D |
+| border | #E2DED5 | #2E2B27 |
+| input（控件边界） | #898174 | #777168 |
+| foreground | #16130F | #F2EFE9 |
+| muted-foreground | #6B655B | #A39E94 |
+| primary（朱红） | #C4313B | #FF6B6F |
+| primary-foreground | #FFFFFF | #16130F |
+| success（成功绿） | #246B45 | #83CFA0 |
+| warning（琥珀） | #875500 | #E4B663 |
+| danger / destructive（酒红） | #7C2948 | #E4A0C0 |
+| unknown（灰） | #6D675F | #AAA398 |
 
-## 目录所有权
-主代理负责 src/app/(public)、根布局、globals.css、共享 components。数据代理负责 lib/api、lib/mock、app/api。站长代理负责 app/merchant、components/merchant、lib/mock/merchant.ts。管理代理负责 app/admin、components/admin、lib/mock/admin.ts。不得改他人文件或执行 git 写操作。
+**朱红 primary 只用于品牌、链接、主按钮、选中态和编辑性排名序号，永远不表示状态。** 质量分数使用正文色；成功用 success，存疑用 warning，失败/不可用/假模型用偏紫酒红 danger，未检测用 unknown。徽章必须有文字/图标；失败可信徽章同时使用虚线边框和 ShieldSlash 图标，可用率失败格增加斜纹。错误提示使用 danger。destructive 仅用于删除、驳回等破坏性动作，不能用 primary。延迟曲线使用中性的 chart-1，不用品牌色或成功色暗示状态。
 
-## 榜单密度
-榜单标题与副标题同排；厂商、搜索与模型占第一行，五个排序分段按钮与「更多筛选」占第二行。次级条件折叠，输入防抖 300ms，其余控件即时生效并同步 URL。桌面表格行高 68px，表头 sticky 于导航下方；1440×900 实测首屏完整显示 7 行。移动端改为卡片，横向厂商导航独立滚动。页面主容器使用 overflow-x:clip，避免破坏 sticky。
+shadcn 的 accent 是交互悬停底色，和品牌 primary 含义不同；muted 是背景，次级文字必须使用 muted-foreground。ring=primary；chart-1..5 使用墨黑/中灰/蓝/靛/棕；sidebar-* 映射 card、foreground、primary、accent、border、ring。radius=0.75rem。旧领域变量 bg/panel/text/line/good/warn/bad 是对应规范 token 的别名，不另定义颜色。
+
+`next-themes`：attribute=class、defaultTheme=light、enableSystem=false、storageKey=hub-theme。SSR 输出亮色；next-themes 在渲染内容前恢复保存的 .dark 类；head 内联脚本在首帧前恢复 class/data-theme，ThemeMeta 跟踪切换并更新 data-theme 和 theme-color。按钮图标由 CSS 类切换，避免 hydration 时错误闪动。字体继续使用本地 geist 包及 PingFang SC / HarmonyOS Sans SC / Noto Sans SC 回退，不使用 next/font/google。
+
+## 对比度
+
+执行 `node apps/web/scripts/check-contrast.mjs --save`。两主题 74 个组合全部通过，包括正文、次级文字、朱红链接、四色状态在背景/白面板/高层面板上的文字对比，主按钮与 hover、状态徽章浅底、厂商标记、控件边界。文字最低 **4.62:1**，控件边界最低 **3.26:1**。
+
+| 组合 | 亮色 | 暗色 |
+| --- | --- | --- |
+| 正文 / 背景 | 16.85 | 16.44 |
+| 次级文字 / 背景 | 5.25 | 7.07 |
+| 朱红链接 / 背景 | 4.96 | 6.81 |
+| 主按钮文字 / 主按钮 | 5.46 | 6.69 |
+| 成功 / 背景 | 5.85 | 10.24 |
+| 警告 / 背景 | 5.74 | 10.03 |
+| 失败 / 背景 | 8.42 | 9.06 |
+| 未知 / 背景 | 5.09 | 7.55 |
+
+面板以边线与 3% 墨色阴影区分；控件边线单独使用 input token。表格使用克制的隔行底色/hover，弹窗、Toast、代码、骨架、滚动条均继承主题。
+
+## 组件约定
+
+初始化 shadcn/ui radix-nova，Tailwind v4，Phosphor 图标。通用组件放 `src/components/ui/`，类名用 `cn` 合并。禁止继续添加手写 btn/input/select/badge/tabs/panel/card/data-table/notice 类。旧 ui.tsx 已改为 page-kit.tsx，只保留 PageHead、Metric、Empty、StatusBadge、FormatDate 等领域组合，内部使用 shadcn。
+
+- Button 的 default=primary，outline/secondary/ghost/link 为普通操作，destructive 为破坏性动作。
+- Card / Table / Badge / Alert / Tabs / ToggleGroup / Select / Input / Textarea / Label / Checkbox / Switch 为唯一通用表现组件。Badge 扩展 success/warning/danger/unknown，默认 unknown。
+- 模型和站点搜索使用 Command + Popover，模型显示 displayName 与厂商，URL/API 使用 slug。
+- 表单使用 react-hook-form + zod + Form。Key 最少 8 位，编辑空值表示保留。配置保存额度提示用 Sonner；不要将保存成功误报失败。
+- Dialog / AlertDialog 处理编辑、审核、确认删除；Sheet 处理移动导航和 Sidebar 移动模式；DropdownMenu 处理用户菜单；Tooltip 解释每格探测结果。
+- Skeleton / Separator / Avatar / ScrollArea / Accordion 为统一加载、分隔、头像、滚动与 FAQ 组件。
+- Sidebar 支持折叠、移动 Sheet，后台包含 Breadcrumb。延迟趋势、60 格探测条是领域专用 SVG/轻量组件，继承 chart/status token。
+
+## 分页约定
+
+所有增长型列表使用 `DataPagination`（shadcn Pagination + Select）：共 N 条、20/50/100、上一页/下一页、省略页码；390px 简化为第 x/y 页。页码是真实 a href，page/pageSize 同步 URL，过滤变化回到第一页。多列表用独立键 runsPage/runsPageSize、modelsPage/modelsPageSize 等，保留其他条件。榜单 rank 使用 API 返回的跨页连续名次。
+
+服务端分页：公开榜单、站点目录、站点评价、探测记录 /channels/:id/runs、收藏、我的评价、通知；后台各 Paginated 接口、站长日志。数组接口（models、vendors、merchant/sites、admin/vendors、announcements 等）先过滤再用 slicePage，仍使用相同 URL 和分页组件。首页 Top3、固定对比不分页。
+
+## 版式
+
+内容最大宽 1320px，桌面边距 48px、移动 20px。品牌区块纵向 120–160px，数据页紧凑。榜单标题与副标题同排，筛选紧凑、更多条件折叠；数字 tabular-nums，行高 68px，表头 sticky 于导航下方。手机改卡片，表格不得撑宽文档。
