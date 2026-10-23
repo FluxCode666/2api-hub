@@ -1,7 +1,7 @@
 {
   "mode": "real",
-  "origin": "http://127.0.0.1:3210",
-  "checkedAt": "2026-10-22T10:49:04.857Z",
+  "origin": "http://127.0.0.1:3211",
+  "checkedAt": "2026-10-23T08:41:09.376Z",
   "results": [
     {
       "group": "public",
@@ -117,7 +117,7 @@
     },
     {
       "group": "public",
-      "path": "/channels/3",
+      "path": "/channels/1",
       "status": 200,
       "expected": 200,
       "runtimeError": false,
@@ -125,7 +125,7 @@
     },
     {
       "group": "public",
-      "path": "/compare?ids=3,17",
+      "path": "/compare?ids=1,2",
       "status": 200,
       "expected": 200,
       "runtimeError": false,

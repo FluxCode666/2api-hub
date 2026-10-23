@@ -1,0 +1,24 @@
+[
+  {
+    "theme": "SmN3iG_variable LaSrKq_variable dark",
+    "width": 390,
+    "dialog": {
+      "left": 16,
+      "right": 374,
+      "height": 775.7109375
+    },
+    "overflow": false,
+    "steps": 0
+  },
+  {
+    "theme": "SmN3iG_variable LaSrKq_variable light",
+    "width": 390,
+    "dialog": {
+      "left": 16,
+      "right": 374,
+      "height": 812
+    },
+    "overflow": false,
+    "steps": 6
+  }
+]

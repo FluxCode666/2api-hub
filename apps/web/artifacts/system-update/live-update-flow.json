@@ -1,0 +1,78 @@
+{
+  "closedBadge": "系统版本 v0.1.0，正在更新：下载发布包",
+  "reopenedProgress": true,
+  "connectionFailuresSimulated": 2,
+  "autoRefreshed": true,
+  "requests": [
+    {
+      "url": "/api/v1/admin/system/update",
+      "at": 1792744529575,
+      "method": "POST"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744529638,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744531642,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744533657,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744535664,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744537669,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744539673,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744541681,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744543689,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744545697,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/healthz",
+      "at": 1792744547706,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/healthz",
+      "at": 1792744549707,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/healthz",
+      "at": 1792744551708,
+      "method": "GET"
+    },
+    {
+      "url": "/api/v1/admin/system/version?mockScenario=available",
+      "at": 1792744551729,
+      "method": "GET"
+    }
+  ]
+}

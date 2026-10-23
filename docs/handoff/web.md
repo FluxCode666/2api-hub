@@ -206,3 +206,20 @@ API 健康检查已通过，Web 已以 `HUB_MOCK=0` 重启。真实模式全量�
 
 - 已发现并反馈后端：所选模型的 stats 与报告摘要口径不一致、模型摘要 ID 为字符串、未检测模型继承主测分数、部分 seed 仅写可信分而无报告、完整 latestReport 未限定主测模型。上述问题由对应负责人修复，前端没有修改后端代码。
 - 最终回归新增发现：带 model 的 minTrust 仍按主测分数筛选；Top3 的模型缓存与最新报告不同源；混线 seed 报告的总分与检查项不一致；可信优先将未检测模型排在 41 分之前。均已交 Kimi 修筛选、排序与 seed，worker 负责人补模型缓存自愈。重新 seed、聚合和 API 更新后全部复测通过：minTrust 排除未检测，所选模型摘要与详情同源，可信分/推荐分按所选口径排序且空值排最后。当前无未解决的联调阻塞。
+
+## 系统版本与站内更新（2026-10-23）
+
+- 管理侧栏新增版本徽章，首次进入后台获取 `/admin/system/version`，空闲时每 30 分钟刷新。可更新时显示品牌圆点与新版本 Tooltip；点击打开 shadcn Dialog，显示当前版本、构建时间、提交短 SHA、API 进程启动时间、最新 Release 和查询时间。
+- 中文发布说明使用 react-markdown + remark-gfm，禁止原始 HTML，远端图片转为文字占位，链接新窗口打开并带 `noopener noreferrer`。说明区用 ScrollArea 限高，沿用亮暗主题 token；失败 danger、自动回退 warning、成功 success，进度使用中性色。更新和回退均由 AlertDialog 二次确认，提醒 10–30 秒中断、备份数据库及自动回退规则。
+- 更新/回退任务在后台布局 Provider 中持续跟踪，关闭 Dialog 或手机侧栏不会中止监测。运行中禁用操作，每 2 秒查询 version；restarting 后轮询同源 `/api/v1/healthz`，短暂断连不报错。健康版本与目标相符后 Sonner 通知并完整刷新；旧版本恢复健康时查询持久任务，区分等待与 rolled_back。最长等待 3 分钟，超时保留进度并提供重新查询，不误报失败或回退。
+- 公开页脚由 Server Component 获取公开 health 版本，缓存 300 秒、失败时隐藏；不读取用户 Cookie。保持 Next standalone 配置，兼容 `HUB_SKIP_API_PRERENDER=1` 无 API 构建。
+- Mock 全部 DTO 直接使用 `@hub/shared`；仅 HUB_MOCK=1 生效。管理员访问 `/admin?updatePreview=<场景>` 可固定状态，支持 `no-update / available / no-release / checking / downloading / verifying / extracting / switching / restarting / succeeded / failed / rolled_back / development / query-error`。固定状态之外，更新/回退 POST 会按时间推进真实 mock 流程；切换场景重置预览状态。真实模式忽略此参数。
+- 运行：`HUB_MOCK=1 pnpm --filter @hub/web build` 后以相同环境启动；真实模式不设置 HUB_MOCK。定向脚本 `WEB_TEST_URL=http://127.0.0.1:3210 node apps/web/scripts/check-system-update.mjs`；mock 校验再加 `HUB_TEST_MOCK=1`。脚本真实模式只读取版本，不执行在线更新。
+- 已完成 mock 接口 36 项检查；亮暗桌面各 8 个状态截图、390px 手机端、发布查询失败、公开页脚、更新确认和动态更新链路截图在 `apps/web/artifacts/system-update/`，均已目视检查。验证了关闭重开进度、两次重启断连后的恢复与自动刷新、Markdown HTML/危险链接拦截、键盘打开/检查后保持焦点/关闭后返回徽章、回退取消不提交及回退完成自动刷新、3 分钟超时（测试时钟推进）；手机对话框左右为 16px/374px，没有横向溢出。主题对比度 74/74 通过。
+
+### 本轮联调问题
+
+- 初次联调发现 GitHub 无 Release 的 404 被误报为 latestError，已反馈 Kimi 并由后端修复；真实接口 6/6 复测通过。UI 正确显示 `0.1.0-dev`、「当前为开发环境，不支持在线更新」和「暂无正式版本」，更新按钮禁用，公开页脚显示开发版本；真实模式忽略 mock 场景参数。前端没有修改后端代码。
+- 后端重构时 8711 曾短暂停机，恢复后已再次通过默认 build、真实接口 6 项与亮暗 UI 验收。
+- 最终 typecheck、普通生产 build、`HUB_SKIP_API_PRERENDER=1` standalone build 通过；真实生产模式路由 42/42、SEO 25/25、对比度 74/74 通过。构建日志、定向脚本输出和浏览器证据集中于 `artifacts/system-update/`。当前无未解决的联调阻塞；本地开发环境不执行真实发布包升级，更新与回退的 UI/恢复行为以 mock 验收，生产 supervisor 和发布包流程由对应负责人验收。
+- Ego TaskSpace 12 已关闭；临时 3211 验收进程已停止，3210 保持真实 API 开发模式。验收后恢复亮色偏好与真实管理员会话。

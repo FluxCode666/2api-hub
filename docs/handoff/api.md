@@ -106,6 +106,15 @@ typecheck 通过；19 个测试全通过（新增 #7 去重、#5 入队复用、
 - 种子新增 3 个混合场景渠道：「Claude 混线（Opus 换皮）」主测 genuine + opus=fake；「GPT 混线（Astra 降智）」fast + astra=downgraded；「Gemini 混线（Flash 换皮）」genuine + flash=fake。每个声明模型有合成报告，channel_models trust 已回写。
 - 验证：`/channels?model=claude-opus-5-5` 中 id=35 混线 trustScore=27（fake），不带 model 时同渠道 trustScore=91（主测 genuine）。
 
+## 站内热更新与生产部署（2026-10-22，RELEASE.md）
+
+- **`@hub/db` 首次初始化**：`runMigrations()` + `initDatabase()`（幂等；vendors 空才写目录；只补缺失 settings；没有 admin 且密码 ≥12 位才创建；绝不写演示数据）。`migrate.ts` 已复用 `runMigrations`。hub_test 上 5 个测试通过。
+- **更新器 API**（`routes/system.ts` + `lib/updater.ts`）：GitHub Release 查询（缓存 10 分钟，`?refresh=true` 强制刷新，`HUB_GITHUB_TOKEN` 可选）、semver 比较（semver 包，纯 JS）、单飞锁、下载白名单（逐跳校验重定向）、200MB 上限、SHA-256 校验、安全解压（tar 包，拒绝绝对路径/`..`/符号链接越界）、staging 后原子 rename、写 `previous`、原子替换 `current` 符号链接、向 `HUB_SUPERVISOR_PID` 发 SIGHUP、任务状态写 `HUB_DATA_DIR/update-task.json`、回退接口、审计日志、保留最近 3 个版本。生产读 `HUB_RELEASE_DIR/release.json`，开发用根 package.json 版本加 `-dev`；非生产 `canUpdate=false` 并给中文原因。GitHub 404（无 Release）视为「暂无正式版本」不算错误。7 个测试通过（假 HTTP 服务模拟 GitHub）。
+- **Cookie Secure**：`COOKIE_SECURE=false` 显式优先于 `NODE_ENV=production`（线上 HTTP 直连）；`true` 强制开；未设置按 `NODE_ENV` 判断。
+- **`/healthz` 和 `/api/v1/healthz`** 都返回 `{ ok, version }`（公开）。
+- **生产 compose** 重写：`deploy/docker-compose.prod.yml` 改为两个服务（`2api-hub-postgres` 仅内部网络不映射宿主端口 + `2api-hub-app` 单镜像 `ghcr.io/fluxcode666/2api-hub:<tag>`），容器/卷/网络统一 `2api-hub-` 前缀。删除多服务编排和独立 migrate job（迁移由 supervisor 负责）。`deploy/prod.env.example` 更新（含 `HUB_IMAGE_TAG`/`INIT_ADMIN_*`/`HUB_RELEASE_REPOSITORY` 等中文注释）。`deploy/UPDATES.md` 仿 AUXUM 写（首次安装/站内更新/失败回退/手动镜像升级/备份建议）。README 生产章节同步更新。
+- **旧 `apps/*/Dockerfile`（多镜像方案）已废弃**，README 中注明，生产用根目录 Dockerfile（GLM-A 构建）。
+
 ## 已知问题 / 依赖
 
 - mock-upstream（8712）未启动时，连接测试返回 `network` 错误（符合预期）；worker 启动后 channel_stats/site_stats 会有数据。

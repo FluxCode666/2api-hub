@@ -87,3 +87,10 @@ shadcn 的 accent 是交互悬停底色，和品牌 primary 含义不同；muted
 - 所选模型未检测时，主徽章必须是 unknown「未检测」。主测 fallback 放在低对比背景的独立区域，明确「仅供参考」且不参与所选模型分数；保留八项检查和未计分说明，不用主测高分替代所选模型状态。
 - 渠道详情每个模型使用相同 TrustBadge。报告链接包含 reportModel 和 #report，展示匹配模型的完整报告；最近报告中没有完整正文时展示该模型摘要，避免回到其他模型的报告。
 - 管理设置用 shadcn Select 选择 primary / featured / all，小时数用受校验的 Input；同时说明扩大检测范围会增加请求与 Token 成本。界面和指南均与这一口径保持一致。
+
+## 系统版本与在线更新（2026-10-23）
+
+- 沿用后台字体、纸白/墨黑/朱红 token 与 shadcn 组件。侧栏品牌下以紧凑版本徽章作为入口；朱红圆点仅表示可操作的新版本，进行中使用中性色旋转图标。
+- Dialog 最大宽度 680px，当前版本和最新 Release 分区；中文更新说明使用限高 ScrollArea，Markdown 不渲染原始 HTML 或远端图片。外链统一新窗口并设置 `noopener noreferrer`。
+- 六步进度在桌面横排、手机分行，下载进度用 unknown token；完成使用 success，失败 danger，自动回退 warning。状态始终配文字/图标，步骤以 aria-live 播报。所有新增动画遵循 prefers-reduced-motion。
+- 更新/回退使用 AlertDialog 二次确认；任务执行中禁用操作，关闭版本 Dialog 不影响后台监测。

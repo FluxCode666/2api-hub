@@ -1,0 +1,320 @@
+[
+  {
+    "scene": "no-update",
+    "theme": "light",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n最新版本 v0.1.0\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:27:35\n\n当前已是最新版本\n回退到 v0.0.9\n当前无可用更新\nClose",
+    "disabledButtons": [
+      "当前无可用更新"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "available",
+    "theme": "light",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:27:40\n\n回退到 v0.0.9\n更新到 v0.1.1\nClose",
+    "disabledButtons": [],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "downloading",
+    "theme": "light",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n更新至 v0.1.1\n下载发布包 · 63%\n检查\n：已完成\n下载\n：进行中\n校验\n：等待执行\n解压\n：等待执行\n切换\n：等待执行\n重启\n：等待执行\n\n可关闭此窗口，更新将在后台继续。请勿重复提交任务。\n\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:27:44\n\n回退到 v0.0.9\n任务进行中\nClose",
+    "disabledButtons": [
+      "检查更新",
+      "回退到 v0.0.9",
+      "任务进行中"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "restarting",
+    "theme": "light",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n更新至 v0.1.1\n等待服务重启\n检查\n：已完成\n下载\n：已完成\n校验\n：已完成\n解压\n：已完成\n切换\n：已完成\n重启\n：进行中\n\n服务正在重新启动，短暂连接失败属正常情况。正在自动检测健康状态，最长等待 3 分钟。\n\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:27:47\n\n回退到 v0.0.9\n任务进行中\nClose",
+    "disabledButtons": [
+      "检查更新",
+      "回退到 v0.0.9",
+      "任务进行中"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "succeeded",
+    "theme": "light",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.1\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n已更新至 v0.1.1\n服务健康检查通过。\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:27:50\n\n回退到 v0.1.0\n当前无可用更新\nClose",
+    "disabledButtons": [
+      "当前无可用更新"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "failed",
+    "theme": "light",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n更新失败\n发布包 SHA-256 校验失败，已保留当前版本。\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:27:53\n\n回退到 v0.0.9\n更新到 v0.1.1\nClose",
+    "disabledButtons": [
+      "更新到 v0.1.1"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "rolled_back",
+    "theme": "light",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n新版本启动失败，已自动回退到 v0.1.0\n新版本未通过健康检查，已恢复旧版本。\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:27:54\n\n回退到 v0.0.9\n更新到 v0.1.1\nClose",
+    "disabledButtons": [
+      "更新到 v0.1.1"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "development",
+    "theme": "light",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\n0.1.0-dev\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n暂无正式版本\n检查更新\n\n仓库尚未发布正式 Release，有新版本时会在这里显示。\n\n上次检查：2026/10/23 16:27:56\n\n当前为开发环境，不支持在线更新\n当前无可用更新\nClose",
+    "disabledButtons": [
+      "当前无可用更新"
+    ],
+    "links": [],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "no-update",
+    "theme": "dark",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n最新版本 v0.1.0\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:27:57\n\n当前已是最新版本\n回退到 v0.0.9\n当前无可用更新\nClose",
+    "disabledButtons": [
+      "当前无可用更新"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "available",
+    "theme": "dark",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:28:00\n\n回退到 v0.0.9\n更新到 v0.1.1\nClose",
+    "disabledButtons": [],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "downloading",
+    "theme": "dark",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n更新至 v0.1.1\n下载发布包 · 63%\n检查\n：已完成\n下载\n：进行中\n校验\n：等待执行\n解压\n：等待执行\n切换\n：等待执行\n重启\n：等待执行\n\n可关闭此窗口，更新将在后台继续。请勿重复提交任务。\n\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:28:01\n\n回退到 v0.0.9\n任务进行中\nClose",
+    "disabledButtons": [
+      "检查更新",
+      "回退到 v0.0.9",
+      "任务进行中"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "restarting",
+    "theme": "dark",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n更新至 v0.1.1\n等待服务重启\n检查\n：已完成\n下载\n：已完成\n校验\n：已完成\n解压\n：已完成\n切换\n：已完成\n重启\n：进行中\n\n服务正在重新启动，短暂连接失败属正常情况。正在自动检测健康状态，最长等待 3 分钟。\n\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:28:05\n\n回退到 v0.0.9\n任务进行中\nClose",
+    "disabledButtons": [
+      "检查更新",
+      "回退到 v0.0.9",
+      "任务进行中"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "succeeded",
+    "theme": "dark",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.1\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n已更新至 v0.1.1\n服务健康检查通过。\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:28:08\n\n回退到 v0.1.0\n当前无可用更新\nClose",
+    "disabledButtons": [
+      "当前无可用更新"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "failed",
+    "theme": "dark",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n更新失败\n发布包 SHA-256 校验失败，已保留当前版本。\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:28:09\n\n回退到 v0.0.9\n更新到 v0.1.1\nClose",
+    "disabledButtons": [
+      "更新到 v0.1.1"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "rolled_back",
+    "theme": "dark",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\nv0.1.0\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n新版本启动失败，已自动回退到 v0.1.0\n新版本未通过健康检查，已恢复旧版本。\n最新版本 v0.1.1\n\n发布于 2026/10/23 16:00:00\n\n检查更新\n在 GitHub 查看 Release\n本次更新\n\n让渠道评测更透明，让维护更从容。\n\n新增\n按模型展示可信分，支持查看八项检测依据。\n管理后台支持在线更新，健康检查失败时自动回退。\n改进\n功能\t变化\n榜单\t筛选更紧凑，分页可分享\n主题\t纸白与暗色均通过对比度校验\n 保留配置与数据库\n 校验发布包完整性\n\n详情见 发布说明。\n\n更新前建议备份数据库。\n\nhub_session 与站点配置保持不变。\n\n上次检查：2026/10/23 16:28:10\n\n回退到 v0.0.9\n更新到 v0.1.1\nClose",
+    "disabledButtons": [
+      "更新到 v0.1.1"
+    ],
+    "links": [
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases/tag/v0.1.1",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      },
+      {
+        "href": "https://github.com/FluxCode666/2api-hub/releases",
+        "rel": "noopener noreferrer",
+        "target": "_blank"
+      }
+    ],
+    "htmlScripts": 0
+  },
+  {
+    "scene": "development",
+    "theme": "dark",
+    "text": "系统版本\n\n查看发布说明，更新或回退当前运行版本。\n\n当前版本\n0.1.0-dev\n构建时间\n2026/10/22 13:30:00\n提交\na1b2c3d\n进程启动时间\n2026/10/23 09:12:00\n暂无正式版本\n检查更新\n\n仓库尚未发布正式 Release，有新版本时会在这里显示。\n\n上次检查：2026/10/23 16:28:13\n\n当前为开发环境，不支持在线更新\n当前无可用更新\nClose",
+    "disabledButtons": [
+      "当前无可用更新"
+    ],
+    "links": [],
+    "htmlScripts": 0
+  }
+]

@@ -1,6 +1,6 @@
 {
-  "checkedAt": "2026-10-22T10:49:03.861Z",
-  "web": "http://127.0.0.1:3210",
+  "checkedAt": "2026-10-23T08:41:08.782Z",
+  "web": "http://127.0.0.1:3211",
   "passed": 25,
   "failed": 0,
   "checks": [
@@ -70,9 +70,9 @@
       "detail": "星河API 中转站评测、渠道价格与用户评价 · 2API Hub"
     },
     {
-      "label": "独立 metadata /channels/3",
+      "label": "独立 metadata /channels/1",
       "status": "PASS",
-      "detail": "星河API DeepSeek 特惠 渠道价格与实测记录 · 2API Hub"
+      "detail": "星河API Claude 官转 渠道价格与实测记录 · 2API Hub"
     },
     {
       "label": "独立 metadata /vendors/anthropic",
@@ -127,7 +127,7 @@
     {
       "label": "OG 图像 /sites/xinghe-api",
       "status": "PASS",
-      "detail": "41512 bytes，1200×630"
+      "detail": "41743 bytes，1200×630"
     }
   ]
 }

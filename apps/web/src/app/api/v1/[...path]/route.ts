@@ -60,7 +60,7 @@ async function handler(request: NextRequest, context: { params: Promise<{ path: 
     if (request.method === 'GET' && path.startsWith('/go/')) {
       return NextResponse.redirect((data as { url: string }).url, 302);
     }
-    const response = NextResponse.json(data);
+    const response = NextResponse.json(data, { status: request.method === 'POST' && /^\/admin\/system\/(update|rollback)$/.test(path) ? 202 : 200 });
     if (request.method === 'POST' && ['/auth/login', '/auth/register'].includes(path)) {
       response.cookies.set('hub_session', mockCookieToken(data as SessionUser), { httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 * 24 * 7 });
     }

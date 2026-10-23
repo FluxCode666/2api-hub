@@ -11,6 +11,7 @@ import { MockError } from './error';
 import { mockNow, mockReport, mockUsers } from './fixtures';
 import { mockCommunityStore, type StoredReview } from './store';
 import { publicChannels, publicModels, publicSites, publicVendors } from './public';
+import { mockHealth, mockSystem } from './system';
 export { mockCommunityStore } from './store';
 
 export function mockCookieToken(user: SessionUser): string {
@@ -151,8 +152,11 @@ export async function mockRequest(path: string, method: string, body: unknown, u
   if (pathname.startsWith('/admin')) {
     const admin = requiredUser(user);
     if (admin.role !== 'admin') throw new MockError(403, 'forbidden', '仅管理员可访问。');
+    if (pathname.startsWith('/admin/system/')) return mockSystem(`${pathname}${url.search}`, verb, body, admin);
     return mockAdmin(`${pathname}${url.search}`, verb, body, admin);
   }
+
+  if (verb === 'GET' && pathname === '/healthz') return mockHealth();
 
   if (verb === 'GET' && pathname === '/meta') return {
     vendors: publicVendors(), featuredModels: publicModels().filter((model) => model.isFeatured),

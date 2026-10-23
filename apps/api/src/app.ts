@@ -14,6 +14,7 @@ import { authRoutes } from './routes/auth';
 import { meRoutes } from './routes/me';
 import { merchantRoutes } from './routes/merchant';
 import { adminRoutes } from './routes/admin';
+import { systemRoutes } from './routes/system';
 
 export interface AppOptions {
   databaseUrl?: string;
@@ -61,8 +62,7 @@ export async function buildApp(opts: AppOptions = {}) {
   await app.register(meRoutes);
   await app.register(merchantRoutes);
   await app.register(adminRoutes);
-
-  app.get('/healthz', async (): Promise<{ ok: true }> => ({ ok: true }));
+  await app.register(systemRoutes);
 
   return app;
 }

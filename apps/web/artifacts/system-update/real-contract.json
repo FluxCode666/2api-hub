@@ -1,0 +1,7 @@
+{
+  "base": "http://127.0.0.1:3210",
+  "mode": "real",
+  "passed": 6,
+  "failed": 0,
+  "version": "0.1.0-dev"
+}

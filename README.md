@@ -113,20 +113,26 @@ pnpm db:seed      # 种子数据（幂等，可重复）
 
 ## 生产部署
 
+单一应用镜像（含 supervisor + 迁移 + 三进程），参考 [deploy/UPDATES.md](deploy/UPDATES.md)。
+
 ```bash
 # 1. 准备环境变量
-cp deploy/prod.env.example deploy/.env.prod
-# 编辑 .env.prod，必填：POSTGRES_PASSWORD / APP_ENCRYPTION_KEY / SESSION_SECRET
+cp deploy/prod.env.example .env
+chmod 600 .env
+# 编辑 .env，必填：POSTGRES_PASSWORD / APP_ENCRYPTION_KEY / SESSION_SECRET
 # 密钥生成：openssl rand -hex 32
 
-# 2. 构建并启动（自动执行数据库迁移）
-docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod up -d --build
+# 2. 启动（自动执行数据库迁移 + 首次初始化）
+docker compose -f deploy/docker-compose.prod.yml --env-file .env up -d
 
-# 3. （可选）演示模式附带 mock-upstream
-docker compose -f deploy/docker-compose.prod.yml --env-file deploy/.env.prod --profile demo up -d
+# 3. 验证
+curl http://127.0.0.1:3210/api/v1/healthz
+# {"ok":true,"version":"v0.1.0"}
 ```
 
-**前置要求**：`apps/web/next.config.ts` 需要 `output: 'standalone'`（由前端负责人添加）。
+**站内热更新**：管理员后台 → 版本徽章 → 检查更新 → 一键更新（自动下载/校验/切换/重启，失败自动回退）。详见 [deploy/UPDATES.md](deploy/UPDATES.md)。
+
+**注意**：`apps/*/Dockerfile`（多镜像方案）已废弃，生产用根目录 `Dockerfile`（由 GLM-A 构建）。
 
 ## 检测与评分机制
 

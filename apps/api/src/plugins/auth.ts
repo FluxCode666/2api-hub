@@ -49,8 +49,9 @@ export default fp(async (app: import('fastify').FastifyInstance) => {
         .sign(secret());
     },
     setSessionCookie(reply: FastifyReply, token: string) {
-      // 生产环境（或 COOKIE_SECURE=true）强制 Secure，本地 HTTP 开发关闭
-      const secure = process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
+      // COOKIE_SECURE 显式 false 优先（线上 HTTP 直连）；true 强制开；未设置时按 NODE_ENV=production
+      const cs = process.env.COOKIE_SECURE;
+      const secure = cs === 'false' ? false : cs === 'true' ? true : process.env.NODE_ENV === 'production';
       void reply.setCookie(SESSION_COOKIE, token, {
         path: '/',
         httpOnly: true,
@@ -60,7 +61,8 @@ export default fp(async (app: import('fastify').FastifyInstance) => {
       });
     },
     clearSessionCookie(reply: FastifyReply) {
-      const secure = process.env.COOKIE_SECURE === 'true' || process.env.NODE_ENV === 'production';
+      const cs = process.env.COOKIE_SECURE;
+      const secure = cs === 'false' ? false : cs === 'true' ? true : process.env.NODE_ENV === 'production';
       void reply.clearCookie(SESSION_COOKIE, { path: '/', secure });
     },
     async verify(token: string): Promise<AuthTokenPayload | null> {

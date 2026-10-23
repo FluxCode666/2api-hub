@@ -1,0 +1,7 @@
+{
+  "base": "http://127.0.0.1:3211",
+  "mode": "mock",
+  "passed": 36,
+  "failed": 0,
+  "version": "v0.1.0"
+}
