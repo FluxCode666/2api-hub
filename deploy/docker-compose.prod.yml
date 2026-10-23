@@ -33,9 +33,8 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: >-
-        postgres://${POSTGRES_USER:-hub}:${POSTGRES_PASSWORD}
-        @postgres:5432/${POSTGRES_DB:-hub}
+      # 单行书写（YAML 折叠 >- 会在换行处插入空格，导致连接串失效）；密码请用 URL 安全字符（如 openssl rand -hex 24）
+      DATABASE_URL: postgres://${POSTGRES_USER:-hub}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hub}
       APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:?必须设置，openssl rand -hex 32}
       SESSION_SECRET: ${SESSION_SECRET:?必须设置}
       ALLOW_PRIVATE_PROBE: ${ALLOW_PRIVATE_PROBE:-false}
