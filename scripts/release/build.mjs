@@ -11,7 +11,7 @@
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, mkdirSync, writeFileSync, existsSync, rmSync, readdirSync, statSync, readFileSync } from 'node:fs';
+import { cpSync, mkdirSync, writeFileSync, existsSync, rmSync, readdirSync, statSync, readFileSync, lstatSync, readlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -113,10 +113,7 @@ writeFileSync(join(webOut, 'server.js'), [
   '',
 ].join('\n'));
 
-// ---------- 4. release.json ----------
-writeFileSync(join(releaseDir, 'release.json'), JSON.stringify({ version: tag, commit, buildDate }, null, 2) + '\n');
-
-// ---------- 5. 原生模块处理（发布包必须与 CPU 架构无关）----------
+// ---------- 4. 原生模块处理（发布包必须与 CPU 架构无关）----------
 // Next 的可选依赖 sharp 带平台二进制（@img/sharp-*/*.node）。项目未使用 next/image
 // （全站无 <Image> 组件），sharp 不会被调用——排除全部平台二进制，保证纯 JS。
 // 若未来启用 next/image，需改为 images.unoptimized 或在运行时按平台安装 sharp。
@@ -164,6 +161,40 @@ walkCheck(releaseDir);
 if (nativeLeft.length > 0) {
   console.error(`[release] 发布包仍含原生模块：\n  ${nativeLeft.join('\n  ')}`);
   process.exit(1);
+}
+
+// ---------- 5. release.json ----------
+writeFileSync(join(releaseDir, 'release.json'), JSON.stringify({ version: tag, commit, buildDate }, null, 2) + '\n');
+
+// ---------- 5.1 完整性清单（files.sha256 + files.symlinks）----------
+// 每行「<sha256>  <相对路径>」（/ 分隔）；覆盖所有普通文件，不含清单自身。
+// 符号链接单独记录在 files.symlinks：「<相对路径> -> <目标>」。
+// supervisor 的 verifyRelease 与更新器解压后共用这份清单校验（事故修复）。
+console.log('[release] 生成完整性清单（files.sha256 / files.symlinks）…');
+{
+  const hashLines = [];
+  const linkLines = [];
+  const walkList = (dir, rel) => {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      const relPath = rel === '' ? name : `${rel}/${name}`;
+      const st = lstatSync(p);
+      if (st.isSymbolicLink()) {
+        linkLines.push(`${relPath} -> ${readlinkSync(p)}`);
+      } else if (st.isDirectory()) {
+        walkList(p, relPath);
+      } else if (st.isFile()) {
+        if (relPath === 'files.sha256' || relPath === 'files.symlinks') continue; // 清单自身不进哈希清单
+        const h = createHash('sha256').update(readFileSync(p)).digest('hex');
+        hashLines.push(`${h}  ${relPath}`);
+      }
+    }
+  };
+  walkList(releaseDir, '');
+  writeFileSync(join(releaseDir, 'files.symlinks'), linkLines.sort().join('\n') + (linkLines.length > 0 ? '\n' : ''));
+  hashLines.push(`${createHash('sha256').update(readFileSync(join(releaseDir, 'files.symlinks'))).digest('hex')}  files.symlinks`);
+  writeFileSync(join(releaseDir, 'files.sha256'), hashLines.sort().join('\n') + '\n');
+  console.log(`[release] files.sha256：${hashLines.length} 个文件；files.symlinks：${linkLines.length} 个符号链接`);
 }
 
 // ---------- 6. tar.gz + checksums + manifest ----------

@@ -28,6 +28,9 @@ let fakeBase: string;
 let mockRelease: { tag: string; assetName: string; tarball: Buffer; checksum: string } | null = null;
 
 function makeTarball(files: Record<string, string>): Promise<Buffer> {
+  files['files.symlinks'] = '';
+  files['files.sha256'] = Object.entries(files).map(([path, body]) =>
+    `${createHash('sha256').update(body).digest('hex')}  ${path}`).join('\n') + '\n';
   return new Promise((resolvePromise, reject) => {
     const tmpDir = join(process.env.HUB_DATA_DIR!, 'tar-tmp');
     mkdir(join(tmpDir, 'api'), { recursive: true })

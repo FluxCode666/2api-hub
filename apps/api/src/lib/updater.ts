@@ -4,8 +4,8 @@
  */
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readFile, rename, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { lstat, mkdir, readFile, readlink, realpath, rename, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { gt as semverGt, valid as semverValid } from 'semver';
 import * as tar from 'tar';
@@ -130,7 +130,6 @@ export async function fetchLatestRelease(forceRefresh = false): Promise<{ releas
 
 // ---------- 任务状态（持久化到 HUB_DATA_DIR/update-task.json） ----------
 let currentTask: UpdateTask | null = null;
-let taskLoaded = false;
 
 async function taskFile(): Promise<string | null> {
   const cfg = config();
@@ -138,8 +137,7 @@ async function taskFile(): Promise<string | null> {
 }
 
 async function loadTask(): Promise<UpdateTask | null> {
-  if (taskLoaded) return currentTask;
-  taskLoaded = true;
+  // supervisor 也会写此文件，不能缓存启动时读到的状态。
   const f = await taskFile();
   if (!f) return null;
   try {
@@ -154,14 +152,32 @@ async function saveTask(t: UpdateTask | null): Promise<void> {
   currentTask = t;
   const f = await taskFile();
   if (!f) return;
-  await writeFile(f, JSON.stringify(t, null, 2), 'utf8');
+  const tmp = `${f}.tmp-${process.pid}`;
+  await writeFile(tmp, JSON.stringify(t, null, 2), 'utf8');
+  await rename(tmp, f);
 }
 
-/** 新版本启动时调用：若任务 targetVersion === 当前版本且状态为 restarting → 置为 succeeded */
+/** 新版本启动时调用：任务状态收敛
+ *  restarting + targetVersion === 当前版本 → succeeded
+ *  restarting + 不匹配 → rolled_back（kind=update）或 failed，message 写明当前运行版本 */
 export async function completeTaskOnBoot(currentVersion: string): Promise<void> {
   const t = await loadTask();
-  if (t && t.status === 'restarting' && t.targetVersion === currentVersion) {
+  if (!t || ['succeeded', 'failed', 'rolled_back'].includes(t.status)) return;
+  if (t.status !== 'restarting') {
+    await saveTask({ ...t, status: 'failed', message: `服务重启中断了更新，当前运行 ${currentVersion}`, finishedAt: new Date().toISOString() });
+    return;
+  }
+  if (t.targetVersion === currentVersion) {
     await saveTask({ ...t, status: 'succeeded', message: '更新完成', finishedAt: new Date().toISOString() });
+  } else {
+    // 版本不匹配：新版本未能启动（被回退或失败）
+    const msg = `新版本未能启动，当前运行 ${currentVersion}`;
+    await saveTask({
+      ...t,
+      status: t.kind === 'update' ? 'rolled_back' : 'failed',
+      message: msg,
+      finishedAt: new Date().toISOString(),
+    });
   }
 }
 
@@ -266,38 +282,131 @@ async function sha256File(path: string): Promise<string> {
   return hash.digest('hex');
 }
 
-// ---------- 安全解压（拒绝绝对路径/.. /符号链接越界） ----------
-async function extractSafe(tarball: string, destDir: string): Promise<void> {
+/** 按路径段校验：拒绝绝对路径、Windows 盘符、恰好等于 .. 的段、解析后越界。
+ *  保留合法名称：[...path]（Next.js catch-all）、a..b.txt 等。 */
+function isPathSafe(relPath: string, destResolved: string): boolean {
+  // 规范化：统一用 /
+  const normalized = relPath.replace(/\\/g, '/');
+  // 拒绝绝对路径
+  if (normalized.startsWith('/')) return false;
+  // 拒绝 Windows 盘符
+  if (/^[a-zA-Z]:/.test(normalized)) return false;
+  // 按段判断：任何一段恰好等于 .. 则拒绝（a..b、[...path] 不受影响）
+  for (const seg of normalized.split('/')) {
+    if (seg === '..') return false;
+  }
+  // 解析后必须在目标目录内
+  const target = resolve(destResolved, normalized);
+  return target === destResolved || target.startsWith(destResolved + '/');
+}
+
+// ---------- 安全解压（按路径段校验；非法条目导致整个更新失败） ----------
+export async function extractSafe(tarball: string, destDir: string): Promise<void> {
   await mkdir(destDir, { recursive: true });
-  const destResolved = resolve(destDir);
-  await tar.extract({
-    file: tarball,
-    cwd: destDir,
-    filter: (path: string) => {
-      // 拒绝绝对路径和 .. 穿越
-      if (path.startsWith('/') || path.includes('..')) return false;
-      const target = resolve(destResolved, path);
-      return target.startsWith(destResolved + '/') || target === destResolved;
-    },
-  } as never);
-  // 二次校验：遍历解压结果，拒绝符号链接越界
-  const { readdir, readlink, lstat } = await import('node:fs/promises');
-  async function walk(dir: string): Promise<void> {
-    for (const entry of await readdir(dir)) {
-      const full = join(dir, entry);
-      const st = await lstat(full);
-      if (st.isSymbolicLink()) {
-        const target = await readlink(full);
-        const resolved = resolve(dir, target);
-        if (!resolved.startsWith(destResolved)) {
-          throw new Error(`符号链接越界：${entry} → ${target}`);
+  const destResolved = await realpath(destDir);
+  const rejected: string[] = [];
+  // 先检查原始条目和链接目标，避免 tar 规范化绝对路径或解压时才发现越界。
+  await tar.list({ file: tarball, strict: true, onReadEntry: (entry) => {
+    const path = entry.path;
+    if (!isPathSafe(path, destResolved)) rejected.push(path);
+    if (entry.type === 'SymbolicLink') {
+      const target = (entry.linkpath ?? '').replace(/\\/g, '/');
+      const resolved = resolve(destResolved, dirname(path), target);
+      if (target.startsWith('/') || /^[a-zA-Z]:/.test(target)
+        || !(resolved === destResolved || resolved.startsWith(destResolved + '/'))) rejected.push(`${path} -> ${target}`);
+    } else if (entry.type === 'Link') {
+      if (!entry.linkpath || !isPathSafe(entry.linkpath, destResolved)) rejected.push(`${path} -> ${entry.linkpath}`);
+    } else if (!['File', 'Directory'].includes(entry.type)) {
+      rejected.push(`${path}（不支持的条目类型 ${entry.type}）`);
+    }
+  } });
+  if (rejected.length > 0) {
+    await rm(destDir, { recursive: true, force: true });
+    throw new Error(`发布包包含非法路径（疑似路径穿越）：${rejected.slice(0, 5).join(', ')}`);
+  }
+  try {
+    await tar.extract({
+      file: tarball,
+      cwd: destDir,
+      strict: true,
+      filter: (path: string) => {
+        if (!isPathSafe(path, destResolved)) {
+          rejected.push(path);
+          return false;
         }
-      } else if (st.isDirectory()) {
-        await walk(full);
+        return true;
+      },
+    } as never);
+    // 任何非法条目 → 整个更新失败（不静默丢文件）
+    if (rejected.length > 0) {
+      await rm(destDir, { recursive: true, force: true });
+      throw new Error(`发布包包含非法路径（疑似路径穿越）：${rejected.slice(0, 5).join(', ')}${rejected.length > 5 ? ` 等 ${rejected.length} 项` : ''}`);
+    }
+    // 二次校验：遍历解压结果，拒绝符号链接越界
+    const { readdir, readlink, lstat } = await import('node:fs/promises');
+    async function walk(dir: string): Promise<void> {
+      for (const entry of await readdir(dir)) {
+        const full = join(dir, entry);
+        const st = await lstat(full);
+        if (st.isSymbolicLink()) {
+          const target = await readlink(full);
+          const resolved = await realpath(full);
+          if (resolved !== destResolved && !resolved.startsWith(destResolved + '/')) {
+            throw new Error(`符号链接越界：${entry} → ${target}`);
+          }
+        } else if (st.isDirectory()) {
+          await walk(full);
+        }
       }
     }
+    await walk(destDir);
+  } catch (err) {
+    await rm(destDir, { recursive: true, force: true });
+    throw err;
   }
-  await walk(destDir);
+}
+
+// ---------- 解压后完整性校验（files.sha256 逐文件校验；缺失时校验关键文件） ----------
+export async function verifyIntegrity(stagingDir: string, _tarball = ''): Promise<void> {
+  const root = await realpath(stagingDir);
+  const required = ['release.json', 'api/index.mjs', 'worker/index.mjs', 'migrate/index.mjs'];
+  for (const f of required) {
+    if (!(await lstat(join(root, f)).catch(() => null))?.isFile()) throw new Error(`发布包缺少关键文件：${f}`);
+  }
+  const manifestPath = join(root, 'files.sha256');
+  if (!(await lstat(manifestPath).catch(() => null))) {
+    const meta = JSON.parse(await readFile(join(root, 'release.json'), 'utf8')) as { version?: string };
+    if (meta.version && semverValid(meta.version) && !semverGt('v0.1.2', meta.version)) throw new Error('发布包完整性校验失败：缺少 files.sha256');
+    return; // v0.1.1 及更早的发布包兼容
+  }
+  const fail = (message: string): never => { throw new Error(`发布包完整性校验失败：${message}`); };
+  const safeFile = async (rel: string) => {
+    if (!isPathSafe(rel, root) || rel.includes('\\') || rel === '.' || rel === '') fail(`非法清单路径：${rel}`);
+    const full = join(root, rel);
+    const actual = await realpath(full).catch(() => '');
+    if (!actual.startsWith(root + '/')) fail(`文件缺失或链接越界：${rel}`);
+    return full;
+  };
+  if (!(await lstat(manifestPath)).isFile()) fail('files.sha256 必须为普通文件');
+  const lines = (await readFile(manifestPath, 'utf8')).split('\n').filter((l) => l !== '');
+  if (lines.length === 0) fail('files.sha256 为空');
+  for (const line of lines) {
+    const match = /^([0-9a-f]{64})  (.+)$/.exec(line);
+    if (!match || match[2] === 'files.sha256') fail('files.sha256 清单行格式非法');
+    const [, expected, rel] = match!;
+    const full = await safeFile(rel!);
+    if (!(await lstat(full)).isFile()) fail(`应为普通文件：${rel}`);
+    if (await sha256File(full) !== expected) fail(`哈希不一致：${rel}`);
+  }
+  const linkManifest = join(root, 'files.symlinks');
+  if (!(await lstat(linkManifest).catch(() => null))?.isFile()) fail('缺少 files.symlinks');
+  for (const line of (await readFile(linkManifest, 'utf8')).split('\n').filter((l) => l !== '')) {
+    const match = /^(.+) -> (.+)$/.exec(line);
+    if (!match) fail('files.symlinks 清单行格式非法');
+    const [, rel, target] = match!;
+    const full = await safeFile(rel!);
+    if (!(await lstat(full)).isSymbolicLink() || await readlink(full) !== target) fail(`符号链接目标不一致：${rel}`);
+  }
 }
 
 // ---------- 原子切换 ----------
@@ -306,11 +415,10 @@ async function atomicSwitch(dataDir: string, tag: string): Promise<void> {
   const stagingDir = join(releasesDir, `${tag}.staging`);
   const finalDir = join(releasesDir, tag);
   // staging → final（原子 rename）；回退时 staging 可能不存在（直接从 final 切换）
-  try {
-    await rename(stagingDir, finalDir);
-  } catch {
-    // staging 不存在（回退场景），确认 final 存在即可
-    await stat(finalDir);
+  if (await stat(stagingDir).catch(() => null)) {
+    await rename(stagingDir, finalDir); // rename 失败必须中止，不能复用旧目录
+  } else {
+    await stat(finalDir); // 回退场景
   }
   // 写 previous
   const currentLink = join(dataDir, 'current');
@@ -327,7 +435,6 @@ async function atomicSwitch(dataDir: string, tag: string): Promise<void> {
   // 原子替换 current 符号链接（先删旧链接再 rename，避免已存在时失败）
   const tmpLink = join(dataDir, `current.tmp.${Date.now()}`);
   await symlink(join('releases', tag), tmpLink);
-  await unlink(currentLink).catch(() => {}); // 忽略不存在
   await rename(tmpLink, currentLink);
 }
 
@@ -442,9 +549,22 @@ async function runUpdate(task: UpdateTask, hooks: UpdateHooks): Promise<void> {
     // 校验 release.json
     const releaseJson = JSON.parse(await readFile(join(stagingDir, 'release.json'), 'utf8')) as { version?: string };
     if (releaseJson.version !== task.targetVersion) throw new Error('发布包版本与目标版本不符');
+    // 完整性校验：files.sha256 逐文件校验（缺失时校验关键文件）
+    await verifyIntegrity(stagingDir, tarball);
 
     // 5. 切换
     await setTaskStatus(task, 'switching', '正在切换版本');
+    // 重复更新到同一版本：releases/<tag> 已存在且非 current → 先删除旧目录再解压（不复用残缺目录）
+    const finalDir = join(cfg.DATA_DIR!, 'releases', task.targetVersion);
+    const currentLink = join(cfg.DATA_DIR!, 'current');
+    let currentTarget: string | null = null;
+    try {
+      const { readlink } = await import('node:fs/promises');
+      currentTarget = basename(await readlink(currentLink));
+    } catch { /* 无 current */ }
+    if (currentTarget === task.targetVersion) throw new Error('目标版本已成为当前版本，请刷新后重试');
+    // 上次失败残留的同 tag 包必须由本次验证通过的 staging 替换。
+    await rm(finalDir, { recursive: true, force: true });
     await atomicSwitch(cfg.DATA_DIR!, task.targetVersion);
     await cleanupOldVersions(cfg.DATA_DIR!);
 
