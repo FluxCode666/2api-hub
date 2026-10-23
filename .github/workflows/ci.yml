@@ -61,9 +61,7 @@ jobs:
       # 各测试 setup 将库名替换为 hub_test（与开发库隔离）
       DATABASE_URL: postgres://hub:hub@127.0.0.1:5432/hub
       # CI 占位密钥（64 位 hex，仅测试用）
-      APP_ENCRYPTION_KEY: >-
-        00000000000000000000000000000000
-        00000000000000000000000000000000
+      APP_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
       SESSION_SECRET: ci-session-secret
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # actions/checkout@v4
