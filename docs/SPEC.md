@@ -317,10 +317,13 @@ API Key 使用 AES-256-GCM 加密存储（`APP_ENCRYPTION_KEY`，格式 `v1:<iv 
 | GET/POST/PATCH/DELETE | `/admin/announcements[/:id]` | 公告 |
 | GET/PUT | `/admin/settings` | 全局设置（`SettingsMap`） |
 | GET | `/admin/audit-logs` | 审计日志 |
+| GET | `/admin/system/version` | 当前版本、最新 Release、更新任务 `SystemVersionInfo`（`?refresh=true` 强制刷新） |
+| POST | `/admin/system/update` | `{ targetVersion }` → 202 `UpdateTask`，站内热更新（见 docs/RELEASE.md） |
+| POST | `/admin/system/rollback` | 回退到上一版本 → 202 `UpdateTask` |
 
 ### 7.6 健康检查
 
-`GET /healthz` → `{ ok: true }`（api），worker 在 8713 端口提供同样的 `/healthz` 与 `/metrics`（JSON：队列积压、最近一轮耗时、并发）。
+`GET /healthz` → `HealthResponse { ok: true, version }`（api），worker 在 8713 端口提供同样的 `/healthz` 与 `/metrics`（JSON：队列积压、最近一轮耗时、并发）。
 
 ## 8. 前端信息架构（@hub/web）
 

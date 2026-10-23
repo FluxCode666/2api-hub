@@ -61,3 +61,7 @@
 > - `SettingsMap` 新增 `authenticity.modelScope`（默认 all）、`authenticity.secondaryIntervalHours`（默认 48）。
 > - schema：`channel_models.recommend_score`（可空，worker 写入）。迁移由编排者生成。
 > - 分工：GLM-B worker（检测范围扩展 + 模型级推荐分）、Kimi API（按模型口径查询/排序 + 种子增加混合场景渠道）、GLM-A mock（按模型覆盖场景）、Codex web（悬浮卡片口径标识 + 详情页模型列表 + 管理设置项）。
+
+## 2026-10-23 发版与站内热更新 —— 编排者
+
+> 新增 `docs/RELEASE.md`（运行时/更新器/前端三方契约）；`@hub/shared` 新增 `BuildInfo`、`ReleaseInfo`、`UpdateTask`、`SystemVersionInfo`、`HealthResponse`；SPEC §7.5 新增 `/admin/system/version|update|rollback`，`/healthz` 返回 version。分工：GLM-A（打包、Dockerfile、supervisor、GitHub Actions）、Kimi（更新器 API、首次初始化、生产 compose）、Codex（版本徽章与更新对话框）。

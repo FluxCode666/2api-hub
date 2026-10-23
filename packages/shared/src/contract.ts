@@ -702,3 +702,56 @@ export interface SettingsMap {
   'site.allowRegistration': boolean;
   'site.announcementBar': string;
 }
+
+// ---------- system / release（docs/RELEASE.md §4） ----------
+export interface BuildInfo {
+  version: string;            // 'v0.1.0'；开发环境为 package.json 版本加 '-dev'
+  commit: string | null;
+  buildDate: string | null;
+  startedAt: string;          // 当前 API 进程启动时间
+}
+
+export interface ReleaseInfo {
+  version: string;            // tag，如 'v0.1.1'
+  name: string;
+  publishedAt: string;
+  notesMd: string;            // 中文更新说明（Markdown）
+  url: string;                // GitHub Release 页面
+  assetName: string | null;
+  assetSize: number | null;
+}
+
+export type UpdateTaskKind = 'update' | 'rollback';
+export type UpdateTaskStatus =
+  | 'checking' | 'downloading' | 'verifying' | 'extracting' | 'switching' | 'restarting'
+  | 'succeeded' | 'failed' | 'rolled_back';
+
+export interface UpdateTask {
+  id: string;
+  kind: UpdateTaskKind;
+  fromVersion: string;
+  targetVersion: string;
+  status: UpdateTaskStatus;
+  message: string | null;     // 中文进度说明或失败原因
+  progress: number | null;    // 0-1，下载阶段可用
+  startedAt: string;
+  finishedAt: string | null;
+  requestedBy: { id: string; email: string } | null;
+}
+
+export interface SystemVersionInfo {
+  current: BuildInfo;
+  latest: ReleaseInfo | null;   // 查询失败或无正式版时为 null
+  latestError: string | null;   // 查询 GitHub 失败的原因
+  checkedAt: string | null;
+  updateAvailable: boolean;     // latest 的 semver 大于当前版本
+  canUpdate: boolean;           // 运行环境支持在线更新且 updateAvailable
+  reason: string | null;        // canUpdate=false 时的中文原因
+  previousVersion: string | null;
+  task: UpdateTask | null;      // 最近一次任务（进行中或最近完成）
+}
+
+export interface HealthResponse {
+  ok: boolean;
+  version: string;
+}
