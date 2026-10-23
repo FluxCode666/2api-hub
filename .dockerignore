@@ -1,0 +1,7 @@
+# 构建上下文只需要：runtime、发布包、少量元数据
+# 注意：先排除全部再恢复时，目录的内容需要 /** 显式恢复
+*
+!deploy/runtime/**
+!dist/release/**
+!CHANGELOG.md
+!package.json

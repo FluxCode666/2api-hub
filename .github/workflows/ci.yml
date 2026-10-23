@@ -1,0 +1,144 @@
+# =============================================================================
+# 2API Hub - CI 流水线
+# =============================================================================
+# push / PR：类型检查、各包测试、运行时测试、web 构建。
+# Release 工作流复用同一套质量门禁（workflow_call）。
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Release 工作流复用本流水线作为质量门禁
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    name: 类型检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # actions/checkout@v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 启用 pnpm（corepack）
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.30.2 --activate
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 全量 typecheck
+        run: pnpm -r typecheck
+
+  test:
+    name: 单元与集成测试（含数据库）
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # 测试用独立 postgres service（CI 每次全新容器）
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hub
+          POSTGRES_PASSWORD: hub
+          POSTGRES_DB: hub
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # 各测试 setup 将库名替换为 hub_test（与开发库隔离）
+      DATABASE_URL: postgres://hub:hub@127.0.0.1:5432/hub
+      # CI 占位密钥（64 位 hex，仅测试用）
+      APP_ENCRYPTION_KEY: >-
+        00000000000000000000000000000000
+        00000000000000000000000000000000
+      SESSION_SECRET: ci-session-secret
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # actions/checkout@v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 启用 pnpm（corepack）
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.30.2 --activate
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 创建测试库 hub_test 并迁移
+        run: |
+          psql "$DATABASE_URL" -c "CREATE DATABASE hub_test;"
+          DATABASE_URL=postgres://hub:hub@127.0.0.1:5432/hub_test \
+            pnpm --filter @hub/db migrate
+
+      - name: 检测引擎测试（@hub/probe）
+        run: pnpm --filter @hub/probe test
+
+      - name: 模拟上游测试（@hub/mock-upstream）
+        run: pnpm --filter @hub/mock-upstream test
+
+      - name: API 集成测试（@hub/api）
+        run: pnpm --filter @hub/api test
+
+      - name: Worker 测试（@hub/worker）
+        run: pnpm --filter @hub/worker test
+
+  test-runtime:
+    name: 运行时测试（supervisor 热更新）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # actions/checkout@v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 启用 pnpm（corepack）
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.30.2 --activate
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: supervisor 单元测试
+        run: pnpm test:runtime
+
+  web-build:
+    name: Web 构建
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # actions/checkout@v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 启用 pnpm（corepack）
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.30.2 --activate
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建 Next.js（无 API 预渲染）
+        env:
+          HUB_SKIP_API_PRERENDER: '1'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: pnpm --filter @hub/web build

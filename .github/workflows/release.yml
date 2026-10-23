@@ -1,0 +1,147 @@
+# =============================================================================
+# 2API Hub - Release 流水线
+# =============================================================================
+# 推送 v*.*.* tag 触发（workflow_dispatch 可重试同一 tag）：
+# 复用 CI 质量门禁 → 校验 tag 与版本一致 → 构建发布包 → 多架构镜像推送 GHCR
+# → 从 CHANGELOG 提取中文说明 → 创建 GitHub Release 并上传 3 个资产。
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  # 重试时选择同一个 tag，禁止从分支凭空发布版本
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: 2api-hub-release
+  cancel-in-progress: false
+
+jobs:
+  quality-gate:
+    name: 质量检查
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    name: 构建发布包与镜像并发布 Release
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # actions/checkout@v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 启用 pnpm（corepack）
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.30.2 --activate
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 校验 tag 与 package.json 版本一致
+        run: |
+          PKG_VERSION="v$(node -p "require('./package.json').version")"
+          if [ "$RELEASE_TAG" != "$PKG_VERSION" ]; then
+            echo "::error::tag $RELEASE_TAG 与 package.json 版本 $PKG_VERSION 不一致"
+            exit 1
+          fi
+
+      - name: 提取中文更新说明（缺失则失败）
+        id: notes
+        run: |
+          # 提取 ## [vX.Y.Z] 小节到 /tmp/release-notes.md（后续步骤直接读文件，
+          # 避免 step output 模板展开进 shell 的注入面）
+          python3 - "$RELEASE_TAG" <<'PY'
+          import re, sys
+          tag = sys.argv[1]
+          text = open('CHANGELOG.md', encoding='utf-8').read()
+          m = re.search(
+              rf'^## \[{re.escape(tag)}\][^\n]*\n(.*?)(?=^## |\Z)',
+              text, re.S | re.M)
+          if not m or not m.group(1).strip():
+              sys.exit(1)
+          open('/tmp/release-notes.md', 'w', encoding='utf-8').write(
+              m.group(1).strip() + '\n')
+          PY
+          if [ ! -s /tmp/release-notes.md ]; then
+            echo "::error::CHANGELOG.md 缺少 ## [$RELEASE_TAG] 小节（发布必须附中文更新说明）"
+            exit 1
+          fi
+
+      - name: 构建发布包（release:build）
+        run: pnpm release:build --tag "$RELEASE_TAG"
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 构建并推送多架构镜像
+        id: image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/fluxcode666/2api-hub:${{ github.ref_name }}
+          build-args: |
+            RELEASE_TAG=${{ github.ref_name }}
+            RELEASE_DIR=dist/release
+          labels: |
+            org.opencontainers.image.source=https://github.com/FluxCode666/2api-hub
+            org.opencontainers.image.version=${{ github.ref_name }}
+
+      - name: 判断是否为正式版（更新 latest 别名）
+        id: meta
+        run: |
+          # 预发布（如 v0.2.0-rc.1）不参与 latest 与站内更新
+          if echo "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "latest=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 更新 latest 镜像别名（仅正式版）
+        if: steps.meta.outputs.latest == 'true'
+        # RELEASE_TAG 来自 job 级 env（github.ref_name），脚本内只引用环境变量
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/fluxcode666/2api-hub:latest \
+            "ghcr.io/fluxcode666/2api-hub:$RELEASE_TAG"
+
+      - name: 创建 GitHub Release 并上传资产
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="$RELEASE_TAG"
+          TITLE="2API Hub $TAG"
+          # 确定是否预发布
+          PRERELEASE_FLAG=""
+          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+          gh release create "$TAG" \
+            --title "$TITLE" \
+            --notes-file /tmp/release-notes.md \
+            $PRERELEASE_FLAG \
+            "dist/2api-hub-$TAG.tar.gz" \
+            "dist/checksums.txt" \
+            "dist/release-manifest.json" 

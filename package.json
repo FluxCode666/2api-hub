@@ -20,9 +20,13 @@
     "db:seed": "pnpm --filter @hub/db seed",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "release:build": "node scripts/release/build.mjs",
+    "test:runtime": "vitest run --root deploy/runtime"
   },
   "devDependencies": {
-    "concurrently": "^10.0.6"
+    "concurrently": "^10.0.6",
+    "esbuild": "^0.28.2",
+    "vitest": "^5.0.5"
   }
 }
