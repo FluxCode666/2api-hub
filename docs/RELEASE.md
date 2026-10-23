@@ -82,7 +82,7 @@ Release 正文为中文更新说明，取自 `CHANGELOG.md` 中 `## [vX.Y.Z]` �
 | GET | `/api/v1/admin/system/version` | `SystemVersionInfo`；`?refresh=true` 强制重新查询 GitHub（默认缓存 10 分钟） |
 | POST | `/api/v1/admin/system/update` | `{ targetVersion }` → 202 `UpdateTask`；单飞（已有进行中任务返回 409） |
 | POST | `/api/v1/admin/system/rollback` | 回退到 `previous` → 202 `UpdateTask` |
-| GET | `/healthz` | `{ ok: true, version }`（公开，不需要登录） |
+| GET | `/healthz`、`/api/v1/healthz` | `HealthResponse { ok: true, version }`（公开，不需要登录；前端经同源代理轮询 `/api/v1/healthz`） |
 
 更新流程（服务端，独立于请求的后台任务，整体超时 15 分钟）：
 1. **检查**：重新查询 `GET https://api.github.com/repos/{repo}/releases/latest`（非预发布最新版），要求 `targetVersion === latest.tag` 且 semver 大于当前版本，资产齐全；否则拒绝（不允许降级、过期目标、无效版本）。
@@ -98,7 +98,7 @@ Release 正文为中文更新说明，取自 `CHANGELOG.md` 中 `## [vX.Y.Z]` �
 ## 5. 前端
 
 - 管理后台侧边栏顶部的品牌区显示当前版本号徽章（如 `v0.1.0`），有新版本时显示圆点提示。
-- 点击打开「系统版本」对话框：当前版本、构建时间、提交；最新版本、发布时间、中文更新说明（Markdown 渲染，需清洗 HTML）；「更新到 vX.Y.Z」主按钮（二次确认：提醒先备份数据库）；更新过程展示步骤进度（检查 → 下载 → 校验 → 解压 → 切换 → 重启），轮询任务状态；进入 `restarting` 后轮询 `/healthz` 直到 `version` 变为目标版本，提示成功并刷新页面；失败/自动回退时展示原因。
+- 点击打开「系统版本」对话框：当前版本、构建时间、提交；最新版本、发布时间、中文更新说明（Markdown 渲染，需清洗 HTML）；「更新到 vX.Y.Z」主按钮（二次确认：提醒先备份数据库）；更新过程展示步骤进度（检查 → 下载 → 校验 → 解压 → 切换 → 重启），轮询任务状态；进入 `restarting` 后轮询 `/api/v1/healthz`（重启期间 web 进程也会短暂不可用，需容错重试） 直到 `version` 变为目标版本，提示成功并刷新页面；失败/自动回退时展示原因。
 - 存在 `previousVersion` 时提供「回退到 vX」（二次确认）。
 - 公开站页脚以次要文字显示版本号。
 
